@@ -364,8 +364,8 @@ const App: React.FC = () => {
             <h4 className="text-sm font-black text-blue-900 uppercase tracking-widest flex items-center gap-2"><Cloud size={18} /> Integração Google Sheets</h4>
             <p className="text-xs text-blue-700 font-medium leading-relaxed">
               Para salvar seus dados em uma planilha do Google automaticamente, siga estes passos:
-              <br/>1. No seu Google Sheets, vá em <strong>Extensões > Apps Script</strong>.
-              <br/>2. Cole o código fornecido abaixo e clique em <strong>Implantar > Nova Implantação</strong>.
+              <br/>1. No seu Google Sheets, vá em <strong>Extensões &gt; Apps Script</strong>.
+              <br/>2. Cole o código fornecido abaixo e clique em <strong>Implantar &gt; Nova Implantação</strong>.
               <br/>3. Selecione "App da Web" e escolha "Qualquer pessoa" em quem pode acessar.
               <br/>4. Copie o URL gerado e cole no campo abaixo.
             </p>
