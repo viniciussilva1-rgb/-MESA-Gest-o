@@ -171,7 +171,7 @@ const App: React.FC = () => {
       </div>
 
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <SummaryCard icon={<Wallet size={24} />} title="Saldo Atual" value={formatCurrency(stats.netBalance)} color="blue" />
+        <SummaryCard icon={<Wallet size={24} />} title="Saldo Disponível" value={formatCurrency(stats.fundBalances.UTILIDADES + stats.fundBalances.GERAL)} color="blue" />
         <SummaryCard icon={<TrendingUp size={24} />} title="Entradas" value={formatCurrency(stats.totalIncome)} color="emerald" />
         <SummaryCard icon={<Landmark size={24} />} title="Emergência" value={formatCurrency(stats.fundBalances.EMERGENCIA)} color="red" />
         <SummaryCard icon={<FileText size={24} />} title="Reserva Renda" value={formatCurrency(stats.fundBalances.ALUGUER)} color="amber" />
