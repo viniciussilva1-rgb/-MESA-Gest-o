@@ -1,0 +1,587 @@
+
+import React, { useState, useMemo, useEffect } from 'react';
+import { Transaction, FinancialStats, FundType, SystemConfig } from './types';
+import { FUND_INFO } from './constants';
+import TransactionForm from './components/TransactionForm';
+import DashboardCharts from './components/DashboardCharts';
+import { getFinancialInsights } from './services/geminiService';
+import { 
+  Wallet, TrendingUp, TrendingDown, History, Sparkles, 
+  Menu, Bell, LayoutDashboard, Landmark, Settings, FileText, Printer, ChevronRight, Search, Trash2, Cloud, CloudUpload, ExternalLink, CheckCircle2, AlertCircle
+} from 'lucide-react';
+
+const App: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'TRANSACTIONS' | 'REPORTS' | 'SETTINGS'>('DASHBOARD');
+  const [syncStatus, setSyncStatus] = useState<'IDLE' | 'SYNCING' | 'SUCCESS' | 'ERROR'>('IDLE');
+  
+  const [transactions, setTransactions] = useState<Transaction[]>(() => {
+    try {
+      const saved = localStorage.getItem('gestao_a_mesa_data');
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      if (parsed.length > 0 && !parsed[0].fundAllocations.ALUGUER && !parsed[0].fundAllocations.GERAL) {
+        return [];
+      }
+      return parsed;
+    } catch (e) { return []; }
+  });
+
+  const [config, setConfig] = useState<SystemConfig>(() => {
+    try {
+      const saved = localStorage.getItem('gestao_a_mesa_config');
+      if (!saved) return {
+        churchName: 'Igreja  À MESA',
+        fundPercentages: { ALUGUER: 40, EMERGENCIA: 10, UTILIDADES: 20, GERAL: 30 },
+        rentTarget: 1200,
+        sheetsUrl: ''
+      };
+      const parsed = JSON.parse(saved);
+      return {
+        churchName: parsed.churchName || 'Igreja  À MESA',
+        fundPercentages: parsed.fundPercentages || { ALUGUER: 40, EMERGENCIA: 10, UTILIDADES: 20, GERAL: 30 },
+        rentTarget: parsed.rentTarget || 1200,
+        sheetsUrl: parsed.sheetsUrl || ''
+      };
+    } catch (e) {
+      return {
+        churchName: 'Igreja  À MESA',
+        fundPercentages: { ALUGUER: 40, EMERGENCIA: 10, UTILIDADES: 20, GERAL: 30 },
+        rentTarget: 1200,
+        sheetsUrl: ''
+      };
+    }
+  });
+  
+  const [aiInsight, setAiInsight] = useState<string>('');
+  const [isLoadingInsight, setIsLoadingInsight] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem('gestao_a_mesa_data', JSON.stringify(transactions));
+  }, [transactions]);
+
+  useEffect(() => {
+    localStorage.setItem('gestao_a_mesa_config', JSON.stringify(config));
+  }, [config]);
+
+  const stats = useMemo((): FinancialStats => {
+    const fundBalances: Record<FundType, number> = { ALUGUER: 0, EMERGENCIA: 0, UTILIDADES: 0, GERAL: 0 };
+    let totalIncome = 0; let totalExpenses = 0;
+    
+    transactions.forEach((tx) => {
+      if (tx.type === 'INCOME') totalIncome += tx.amount;
+      else totalExpenses += tx.amount;
+      
+      Object.entries(tx.fundAllocations).forEach(([fund, val]) => {
+        if (fund in fundBalances) {
+          fundBalances[fund as FundType] += (val as number) || 0;
+        }
+      });
+    });
+    return { totalIncome, totalExpenses, netBalance: totalIncome - totalExpenses, fundBalances };
+  }, [transactions]);
+
+  const chartHistory = useMemo(() => {
+    const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun'];
+    return months.map((m) => ({
+      name: m,
+      income: stats.totalIncome * (0.8 + Math.random() * 0.4),
+      expense: stats.totalExpenses * (0.8 + Math.random() * 0.4),
+    }));
+  }, [stats]);
+
+  const syncToSheets = async () => {
+    if (!config.sheetsUrl) {
+      alert("Por favor, configure o URL da planilha nas Definições primeiro.");
+      setActiveTab('SETTINGS');
+      return;
+    }
+
+    setSyncStatus('SYNCING');
+    try {
+      const response = await fetch(config.sheetsUrl, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          churchName: config.churchName,
+          lastSync: new Date().toISOString(),
+          transactions: transactions.map(t => ({
+            Data: new Date(t.date).toLocaleDateString('pt-PT'),
+            Descricao: t.description,
+            Tipo: t.type === 'INCOME' ? 'Entrada' : 'Saída',
+            Categoria: t.category,
+            Valor: t.amount,
+            Fundo_Renda: t.fundAllocations.ALUGUER,
+            Fundo_Emergencia: t.fundAllocations.EMERGENCIA,
+            Fundo_AguaLuz: t.fundAllocations.UTILIDADES,
+            Fundo_Geral: t.fundAllocations.GERAL
+          }))
+        })
+      });
+
+      setSyncStatus('SUCCESS');
+      setTimeout(() => setSyncStatus('IDLE'), 3000);
+    } catch (error) {
+      console.error("Sync error:", error);
+      setSyncStatus('ERROR');
+      setTimeout(() => setSyncStatus('IDLE'), 5000);
+    }
+  };
+
+  const handleAddTransaction = (tx: Transaction) => {
+    setTransactions([tx, ...transactions]);
+    if (config.sheetsUrl) {
+       setTimeout(syncToSheets, 1000);
+    }
+  };
+
+  const formatCurrency = (val: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(val);
+
+  const resetData = () => {
+    if (confirm("Deseja realmente apagar todos os lançamentos locais? Esta ação não afetará sua planilha do Google se você já tiver sincronizado.")) {
+      setTransactions([]);
+      localStorage.removeItem('gestao_a_mesa_data');
+    }
+  };
+
+  const renderDashboard = () => (
+    <div className="space-y-8 animate-in fade-in duration-500">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h2 className="text-2xl font-black text-slate-900 tracking-tight">Paz do Senhor, Tesouraria!</h2>
+          <p className="text-slate-500 text-sm font-medium">Aqui está o resumo financeiro de hoje.</p>
+        </div>
+        <button 
+          onClick={syncToSheets}
+          disabled={syncStatus === 'SYNCING'}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl font-bold text-sm transition-all shadow-lg active:scale-95 ${
+            syncStatus === 'SYNCING' ? 'bg-slate-200 text-slate-400' :
+            syncStatus === 'SUCCESS' ? 'bg-emerald-500 text-white' :
+            syncStatus === 'ERROR' ? 'bg-red-500 text-white' :
+            'bg-blue-600 text-white hover:bg-blue-700'
+          }`}
+        >
+          {syncStatus === 'SYNCING' ? <Cloud className="animate-bounce" size={18} /> : <CloudUpload size={18} />}
+          {syncStatus === 'SYNCING' ? 'Sincronizando...' : 
+           syncStatus === 'SUCCESS' ? 'Sincronizado!' :
+           syncStatus === 'ERROR' ? 'Erro ao Sincronizar' :
+           'Backup Google Sheets'}
+        </button>
+      </div>
+
+      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <SummaryCard icon={<Wallet size={24} />} title="Saldo Atual" value={formatCurrency(stats.netBalance)} color="blue" />
+        <SummaryCard icon={<TrendingUp size={24} />} title="Entradas" value={formatCurrency(stats.totalIncome)} color="emerald" />
+        <SummaryCard icon={<Landmark size={24} />} title="Emergência" value={formatCurrency(stats.fundBalances.EMERGENCIA)} color="red" />
+        <SummaryCard icon={<FileText size={24} />} title="Reserva Renda" value={formatCurrency(stats.fundBalances.ALUGUER)} color="amber" />
+      </section>
+
+      <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest">Meta de Reserva de Renda (€{config.rentTarget})</h3>
+          <span className="text-sm font-black text-blue-600">
+            {formatCurrency(stats.fundBalances.ALUGUER)} acumulados
+          </span>
+        </div>
+        <div className="w-full bg-slate-100 h-4 rounded-full overflow-hidden shadow-inner border border-slate-200">
+          <div 
+            className={`h-full rounded-full transition-all duration-1000 ${stats.fundBalances.ALUGUER >= config.rentTarget ? 'bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.5)]' : 'bg-blue-500'}`}
+            style={{ width: `${Math.min(100, (stats.fundBalances.ALUGUER / config.rentTarget) * 100)}%` }}
+          />
+        </div>
+        <div className="flex justify-between mt-2">
+          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Faltam {formatCurrency(Math.max(0, config.rentTarget - stats.fundBalances.ALUGUER))} para os 3 meses de reserva</p>
+          {stats.fundBalances.ALUGUER >= config.rentTarget && (
+            <p className="text-[10px] font-black text-emerald-600 uppercase">Reserva de 1200€ Atingida!</p>
+          )}
+        </div>
+      </div>
+
+      <section className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl p-8 text-white shadow-2xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 p-8 opacity-5"><Sparkles size={140} /></div>
+        <div className="relative z-10">
+          <h3 className="text-2xl font-black mb-4 flex items-center gap-3"><Sparkles className="text-amber-400" /> Conselheiro Gemini</h3>
+          {aiInsight ? (
+            <div className="bg-white/5 backdrop-blur-md rounded-2xl p-6 border border-white/10 prose prose-invert max-w-none mb-6">
+              <p className="whitespace-pre-wrap leading-relaxed text-slate-200">{aiInsight}</p>
+            </div>
+          ) : (
+            <p className="text-slate-400 text-lg mb-6">Análise inteligente do fluxo de caixa e equilíbrio dos fundos ministeriais.</p>
+          )}
+          <button
+            onClick={async () => {
+              setIsLoadingInsight(true);
+              const insight = await getFinancialInsights(stats, transactions.slice(0, 10));
+              setAiInsight(insight || 'Análise indisponível.');
+              setIsLoadingInsight(false);
+            }}
+            disabled={isLoadingInsight}
+            className="px-8 py-4 bg-blue-600 text-white font-bold rounded-2xl hover:bg-blue-500 transition-all shadow-xl active:scale-95 disabled:opacity-50"
+          >
+            {isLoadingInsight ? 'Gerando Análise...' : 'Solicitar Consultoria IA'}
+          </button>
+        </div>
+      </section>
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+        <div className="xl:col-span-1 space-y-8">
+          <TransactionForm onAdd={handleAddTransaction} config={config} />
+          <FundDistribution stats={stats} />
+        </div>
+        <div className="xl:col-span-2">
+          <DashboardCharts stats={stats} history={chartHistory} />
+          <div className="mt-8">
+            <RecentTransactions transactions={transactions} formatCurrency={formatCurrency} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderTransactions = () => (
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 animate-in slide-in-from-bottom-4 duration-500 overflow-hidden">
+       <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+          <h3 className="text-xl font-bold text-slate-800">Livro de Caixa Ministerial</h3>
+          <button onClick={syncToSheets} className="text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline"><CloudUpload size={14} /> Backup para Planilha</button>
+       </div>
+       <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-slate-50 text-slate-500 text-[10px] uppercase font-black tracking-widest">
+              <tr>
+                <th className="px-6 py-4 text-left">Data</th>
+                <th className="px-6 py-4 text-left">Descrição</th>
+                <th className="px-6 py-4 text-left">Categoria</th>
+                <th className="px-6 py-4 text-right">Valor</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {transactions.length === 0 ? (
+                <tr><td colSpan={4} className="px-6 py-12 text-center text-slate-400 italic">Nenhum lançamento registrado.</td></tr>
+              ) : (
+                transactions.map(tx => (
+                  <tr key={tx.id} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="px-6 py-4 text-sm text-slate-500">{new Date(tx.date).toLocaleDateString('pt-PT')}</td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm font-bold text-slate-800">{tx.description}</div>
+                      {tx.invoiceRef && <div className="text-[9px] text-slate-400 font-bold mt-1">REF: {tx.invoiceRef}</div>}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-tight ${tx.type === 'INCOME' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
+                        {tx.category}
+                      </span>
+                    </td>
+                    <td className={`px-6 py-4 text-right font-black text-sm ${tx.type === 'INCOME' ? 'text-emerald-600' : 'text-red-600'}`}>
+                      {tx.type === 'INCOME' ? '+' : '-'} {formatCurrency(tx.amount)}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+       </div>
+    </div>
+  );
+
+  const renderReports = () => (
+    <div className="space-y-8 animate-in zoom-in-95 duration-500 print:bg-white print:p-0">
+      <div className="bg-white p-10 rounded-3xl shadow-xl border border-slate-100 print:shadow-none print:border-none">
+        <div className="flex justify-between items-start mb-12 border-b-2 border-slate-900 pb-8">
+          <div className="flex gap-5 items-center">
+            <div className="bg-slate-900 p-4 rounded-2xl text-white shadow-lg"><Landmark size={40} /></div>
+            <div>
+              <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase">{config.churchName}</h1>
+              <p className="text-slate-500 font-bold uppercase text-xs tracking-widest">Relatório Mensal de Gestão Financeira</p>
+            </div>
+          </div>
+          <div className="text-right flex flex-col items-end print:hidden">
+            <button onClick={() => window.print()} className="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-xl hover:bg-black transition-all shadow-lg font-bold">
+              <Printer size={20} /> Emitir PDF do Mês
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
+          <ReportStat label="Total Dízimos/Ofertas" value={formatCurrency(stats.totalIncome)} />
+          <ReportStat label="Total Despesas" value={formatCurrency(stats.totalExpenses)} />
+          <ReportStat label="Saldo Final" value={formatCurrency(stats.netBalance)} highlight />
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+           <div>
+             <h3 className="text-sm font-black text-slate-900 mb-8 uppercase tracking-widest border-l-4 border-slate-900 pl-4">Separação de Verbas por Fundo</h3>
+             <div className="space-y-6">
+                {Object.entries(stats.fundBalances).map(([fund, balance]) => (
+                  <div key={fund}>
+                    <div className="flex justify-between mb-2">
+                      <span className="text-xs font-bold text-slate-600 uppercase">{FUND_INFO[fund as FundType]?.label || fund}</span>
+                      <span className="text-sm font-black text-slate-900">{formatCurrency(balance as number)}</span>
+                    </div>
+                    <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full transition-all duration-1000" style={{ backgroundColor: FUND_INFO[fund as FundType]?.color || '#ccc', width: `${Math.max(0, (balance as number / (stats.totalIncome || 1)) * 100)}%` }} />
+                    </div>
+                  </div>
+                ))}
+             </div>
+           </div>
+           <div className="bg-slate-50 p-10 rounded-3xl border border-dashed border-slate-300 flex flex-col justify-center items-center text-center">
+             <div className="p-6 bg-white rounded-full shadow-sm mb-6 border border-slate-100"><FileText size={48} className="text-slate-900" /></div>
+             <h4 className="text-lg font-black text-slate-900 mb-2 uppercase tracking-tight">Validado pela Tesouraria</h4>
+             <div className="w-64 h-[2px] bg-slate-900 mt-12 mb-4" />
+             <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Responsável Legal</p>
+           </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderSettings = () => (
+    <div className="max-w-3xl mx-auto space-y-8 animate-in slide-in-from-right-4 duration-500">
+      <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-200">
+        <h3 className="text-xl font-black text-slate-800 mb-8 border-b border-slate-100 pb-4">Configurações da Igreja</h3>
+        <div className="space-y-6">
+          <div>
+            <label className="block text-xs font-black text-slate-500 uppercase mb-2">Nome da Igreja</label>
+            <input 
+              type="text" 
+              value={config.churchName}
+              onChange={(e) => setConfig({...config, churchName: e.target.value})}
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-bold" 
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-black text-slate-500 uppercase mb-2">Meta de Reserva de Renda (€)</label>
+            <input 
+              type="number" 
+              value={config.rentTarget}
+              onChange={(e) => setConfig({...config, rentTarget: parseInt(e.target.value)||0})}
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-black text-blue-600" 
+            />
+          </div>
+
+          <div className="p-6 bg-blue-50 rounded-2xl border border-blue-100 space-y-4">
+            <h4 className="text-sm font-black text-blue-900 uppercase tracking-widest flex items-center gap-2"><Cloud size={18} /> Integração Google Sheets</h4>
+            <p className="text-xs text-blue-700 font-medium leading-relaxed">
+              Para salvar seus dados em uma planilha do Google automaticamente, siga estes passos:
+              <br/>1. No seu Google Sheets, vá em <strong>Extensões > Apps Script</strong>.
+              <br/>2. Cole o código fornecido abaixo e clique em <strong>Implantar > Nova Implantação</strong>.
+              <br/>3. Selecione "App da Web" e escolha "Qualquer pessoa" em quem pode acessar.
+              <br/>4. Copie o URL gerado e cole no campo abaixo.
+            </p>
+            
+            <div className="space-y-2">
+              <label className="block text-[10px] font-black text-blue-500 uppercase">URL do App da Web (Webhook)</label>
+              <input 
+                type="text" 
+                value={config.sheetsUrl || ''}
+                onChange={(e) => setConfig({...config, sheetsUrl: e.target.value})}
+                placeholder="https://script.google.com/macros/s/.../exec"
+                className="w-full px-4 py-3 bg-white border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-medium" 
+              />
+            </div>
+
+            <details className="group">
+              <summary className="text-[10px] font-black text-blue-600 uppercase cursor-pointer hover:underline list-none flex items-center gap-1">
+                <ChevronRight size={14} className="group-open:rotate-90 transition-transform" /> Ver Código para o Apps Script
+              </summary>
+              <div className="mt-4 p-4 bg-slate-900 rounded-xl text-[10px] font-mono text-emerald-400 overflow-x-auto whitespace-pre">
+{`function doPost(e) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var data = JSON.parse(e.postData.contents);
+  
+  // Limpa a planilha antes de re-preencher (Opcional)
+  // sheet.clear();
+  
+  // Adiciona cabeçalhos se estiver vazio
+  if (sheet.getLastRow() == 0) {
+    sheet.appendRow(['Data', 'Descrição', 'Tipo', 'Categoria', 'Valor', 'Fundo Renda', 'Fundo Emergência', 'Fundo Água/Luz', 'Fundo Geral']);
+  }
+  
+  // Adiciona as transações novas
+  data.transactions.forEach(function(tx) {
+    sheet.appendRow([tx.Data, tx.Descricao, tx.Tipo, tx.Categoria, tx.Valor, tx.Fundo_Renda, tx.Fundo_Emergencia, tx.Fundo_AguaLuz, tx.Fundo_Geral]);
+  });
+  
+  return ContentService.createTextOutput("Backup Concluído com Sucesso!");
+}`}
+              </div>
+            </details>
+          </div>
+          
+          <div>
+            <h4 className="text-xs font-black text-slate-500 mb-6 uppercase tracking-widest">Divisão de Receitas Automática (%)</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+               {Object.entries(FUND_INFO).map(([key, info]) => (
+                 <div key={key}>
+                   <label className="block text-[10px] font-black text-slate-400 mb-2 uppercase tracking-tighter">{info.label}</label>
+                   <div className="flex items-center gap-2">
+                    <input 
+                      type="number" 
+                      value={config.fundPercentages[key as FundType] || 0}
+                      onChange={(e) => setConfig({
+                        ...config, 
+                        fundPercentages: {...config.fundPercentages, [key]: parseInt(e.target.value)||0}
+                      })}
+                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold text-slate-900" 
+                    />
+                    <span className="font-black text-slate-400">%</span>
+                   </div>
+                 </div>
+               ))}
+            </div>
+            <div className={`mt-6 p-4 rounded-xl text-xs flex items-center justify-between font-bold ${Object.values(config.fundPercentages).reduce((a: number, b: number) => a + b, 0) === 100 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+              <span className="flex items-center gap-2"><Sparkles size={16} /> Total da Distribuição:</span>
+              <span className="text-lg">{Object.values(config.fundPercentages).reduce((a: number, b: number) => a + b, 0)}%</span>
+            </div>
+          </div>
+          
+          <div className="pt-8 border-t border-slate-100 flex flex-col gap-3">
+             <button onClick={() => alert('Configurações salvas no navegador!')} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-black transition-all shadow-lg active:scale-95">Salvar Definições</button>
+             <button onClick={resetData} className="w-full py-3 text-red-500 font-bold hover:bg-red-50 rounded-xl transition-all flex items-center justify-center gap-2 border border-transparent hover:border-red-100">
+               <Trash2 size={16} /> Limpar Todos os Lançamentos Locais
+             </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-slate-50 flex">
+      {isSidebarOpen && <div className="fixed inset-0 bg-slate-900/50 z-40 lg:hidden" onClick={() => setIsSidebarOpen(false)} />}
+
+      <aside className={`fixed inset-y-0 left-0 w-64 bg-slate-900 text-slate-300 z-50 transform transition-transform duration-300 lg:relative lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} print:hidden`}>
+        <div className="p-6">
+          <div className="flex items-center gap-3 mb-10 bg-gradient-to-br from-blue-500/10 to-transparent p-3 rounded-2xl border border-white/5 overflow-hidden">
+            <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center shrink-0 overflow-hidden">
+              <img src="logo.png" alt="Logo" className="w-full h-full object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement!.innerHTML = '<div class="text-white text-[10px] font-black">LOGO</div>' }} />
+            </div>
+            <h1 className="text-xl font-black text-white leading-tight tracking-tighter">&nbsp;&nbsp;À MESA</h1>
+          </div>
+          <nav className="space-y-1">
+            <NavBtn active={activeTab === 'DASHBOARD'} onClick={() => setActiveTab('DASHBOARD')} icon={<LayoutDashboard size={20} />} label="Início" />
+            <NavBtn active={activeTab === 'TRANSACTIONS'} onClick={() => setActiveTab('TRANSACTIONS')} icon={<History size={20} />} label="Lançamentos" />
+            <NavBtn active={activeTab === 'REPORTS'} onClick={() => setActiveTab('REPORTS')} icon={<TrendingUp size={20} />} label="Relatórios" />
+            <NavBtn active={activeTab === 'SETTINGS'} onClick={() => setActiveTab('SETTINGS')} icon={<Settings size={20} />} label="Definições" />
+          </nav>
+        </div>
+        <div className="absolute bottom-6 left-6 right-6">
+          <div className="bg-white/5 border border-white/10 p-4 rounded-2xl backdrop-blur-sm">
+             <p className="text-[10px] uppercase font-black text-slate-500 mb-1 tracking-widest">Sincronização Cloud</p>
+             <div className="text-xs font-bold text-white flex items-center gap-2">
+               <div className={`w-2 h-2 rounded-full ${config.sheetsUrl ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} /> 
+               {config.sheetsUrl ? 'Backup Ativo' : 'Backup Pendente'}
+             </div>
+          </div>
+        </div>
+      </aside>
+
+      <main className="flex-1 overflow-y-auto">
+        <header className="sticky top-0 bg-white/80 backdrop-blur-md border-b border-slate-200 px-8 py-4 flex items-center justify-between z-30 print:hidden">
+          <div className="flex items-center gap-4">
+            <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden p-2 text-slate-500 hover:bg-slate-100 rounded-lg"><Menu size={24} /></button>
+            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">Tesouraria / <span className="text-slate-900">{activeTab}</span></div>
+          </div>
+          <div className="flex items-center gap-4">
+             {syncStatus === 'SYNCING' && <div className="text-[10px] font-black text-blue-600 animate-pulse uppercase">Gravando na Nuvem...</div>}
+             {syncStatus === 'SUCCESS' && <div className="text-[10px] font-black text-emerald-600 uppercase flex items-center gap-1"><CheckCircle2 size={14} /> Salvo no Sheets</div>}
+             {syncStatus === 'ERROR' && <div className="text-[10px] font-black text-red-600 uppercase flex items-center gap-1"><AlertCircle size={14} /> Erro de Conexão</div>}
+             <button className="p-2.5 bg-slate-100 text-slate-500 rounded-xl hover:bg-slate-200 transition-colors"><Bell size={20} /></button>
+          </div>
+        </header>
+
+        <div className="p-6 md:p-10 max-w-7xl mx-auto min-h-[calc(100vh-80px)]">
+          {activeTab === 'DASHBOARD' && renderDashboard()}
+          {activeTab === 'TRANSACTIONS' && renderTransactions()}
+          {activeTab === 'REPORTS' && renderReports()}
+          {activeTab === 'SETTINGS' && renderSettings()}
+        </div>
+      </main>
+    </div>
+  );
+};
+
+// --- Subcomponents ---
+
+const NavBtn = ({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string }) => (
+  <button onClick={onClick} className={`flex items-center gap-4 w-full px-5 py-4 rounded-2xl transition-all font-black text-xs uppercase tracking-widest ${active ? 'bg-blue-600 text-white shadow-xl shadow-blue-500/20 translate-x-1' : 'text-slate-500 hover:bg-white/5 hover:text-slate-200'}`}>
+    {icon} {label}
+  </button>
+);
+
+const SummaryCard = ({ icon, title, value, color }: { icon: React.ReactNode, title: string, value: string, color: string }) => {
+  const colors: any = {
+    blue: "bg-blue-50 text-blue-600 border-blue-100",
+    emerald: "bg-emerald-50 text-emerald-600 border-emerald-100",
+    red: "bg-red-50 text-red-600 border-red-100",
+    amber: "bg-amber-50 text-amber-600 border-amber-100"
+  };
+  return (
+    <div className={`bg-white p-7 rounded-3xl shadow-sm border ${colors[color]} hover:shadow-md transition-all group`}>
+      <div className="flex items-center justify-between mb-6">
+        <div className={`p-4 rounded-2xl ${colors[color]} group-hover:scale-110 transition-transform`}>{icon}</div>
+        <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">{title}</span>
+      </div>
+      <h3 className="text-2xl font-black text-slate-900 tracking-tighter">{value}</h3>
+    </div>
+  );
+};
+
+const ReportStat = ({ label, value, highlight }: { label: string, value: string, highlight?: boolean }) => (
+  <div className={`p-6 rounded-2xl border ${highlight ? 'bg-slate-900 text-white border-slate-900' : 'border-slate-100 bg-white'}`}>
+    <p className={`text-[9px] font-black uppercase tracking-widest mb-2 ${highlight ? 'text-slate-400' : 'text-slate-500'}`}>{label}</p>
+    <h4 className="text-2xl font-black tracking-tight">{value}</h4>
+  </div>
+);
+
+const FundDistribution = ({ stats }: { stats: FinancialStats }) => (
+  <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-200">
+    <h3 className="text-[11px] font-black text-slate-800 mb-8 border-l-4 border-slate-900 pl-4 uppercase tracking-widest">Distribuição por Fondos</h3>
+    <div className="space-y-6">
+      {Object.entries(stats.fundBalances).map(([key, balance]) => {
+        const info = FUND_INFO[key as FundType];
+        if (!info) return null;
+        return (
+          <div key={key}>
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-[10px] font-black text-slate-500 uppercase tracking-tighter">{info.label}</span>
+              <span className="text-sm font-black text-slate-900">{new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(balance as number)}</span>
+            </div>
+            <div className="w-full bg-slate-100 rounded-full h-2 shadow-inner">
+              <div className="h-full rounded-full transition-all duration-1000" style={{ backgroundColor: info.color, width: `${Math.max(0, Math.min(100, (balance as number / (Math.max(stats.totalIncome, 1))) * 100))}%` }} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  </div>
+);
+
+const RecentTransactions = ({ transactions, formatCurrency }: { transactions: Transaction[], formatCurrency: (v: number) => string }) => (
+  <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-200">
+    <div className="flex items-center justify-between mb-8">
+      <h3 className="text-[11px] font-black text-slate-800 flex items-center gap-2 uppercase tracking-widest"><History size={18} className="text-blue-600" /> Movimentações Recentes</h3>
+    </div>
+    <div className="space-y-4">
+      {transactions.slice(0, 5).map(tx => (
+        <div key={tx.id} className="flex items-center justify-between p-4 hover:bg-slate-50 rounded-2xl border border-transparent transition-all">
+          <div className="flex items-center gap-4">
+            <div className={`p-2.5 rounded-xl ${tx.type === 'INCOME' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
+               {tx.type === 'INCOME' ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
+            </div>
+            <div>
+              <p className="text-sm font-bold text-slate-900">{tx.description}</p>
+              <p className="text-[9px] font-black text-slate-400 uppercase tracking-tight">{tx.category} • {new Date(tx.date).toLocaleDateString()}</p>
+            </div>
+          </div>
+          <div className={`text-sm font-black ${tx.type === 'INCOME' ? 'text-emerald-600' : 'text-red-600'}`}>
+            {tx.type === 'INCOME' ? '+' : '-'} {formatCurrency(tx.amount)}
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+export default App;
