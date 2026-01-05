@@ -32,21 +32,24 @@ const App: React.FC = () => {
       if (!saved) return {
         churchName: 'Igreja  À MESA',
         fundPercentages: { ALUGUER: 40, EMERGENCIA: 10, UTILIDADES: 20, GERAL: 30 },
-        rentTarget: 1200,
+        rentTarget: 1350,
+        rentAmount: 450,
         sheetsUrl: ''
       };
       const parsed = JSON.parse(saved);
       return {
         churchName: parsed.churchName || 'Igreja  À MESA',
         fundPercentages: parsed.fundPercentages || { ALUGUER: 40, EMERGENCIA: 10, UTILIDADES: 20, GERAL: 30 },
-        rentTarget: parsed.rentTarget || 1200,
+        rentTarget: parsed.rentTarget || 1350,
+        rentAmount: parsed.rentAmount || 450,
         sheetsUrl: parsed.sheetsUrl || ''
       };
     } catch (e) {
       return {
         churchName: 'Igreja  À MESA',
         fundPercentages: { ALUGUER: 40, EMERGENCIA: 10, UTILIDADES: 20, GERAL: 30 },
-        rentTarget: 1200,
+        rentTarget: 1350,
+        rentAmount: 450,
         sheetsUrl: ''
       };
     }
@@ -179,7 +182,7 @@ const App: React.FC = () => {
 
       <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest">Meta de Reserva de Renda (€{config.rentTarget})</h3>
+          <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest">Meta de Reserva de Renda (3x €{config.rentAmount} = €{config.rentTarget})</h3>
           <span className="text-sm font-black text-blue-600">
             {formatCurrency(stats.fundBalances.ALUGUER)} acumulados
           </span>
@@ -193,7 +196,7 @@ const App: React.FC = () => {
         <div className="flex justify-between mt-2">
           <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Faltam {formatCurrency(Math.max(0, config.rentTarget - stats.fundBalances.ALUGUER))} para os 3 meses de reserva</p>
           {stats.fundBalances.ALUGUER >= config.rentTarget && (
-            <p className="text-[10px] font-black text-emerald-600 uppercase">Reserva de 1200€ Atingida!</p>
+            <p className="text-[10px] font-black text-emerald-600 uppercase">✅ Reserva de 3 Rendas Atingida! (40% não vai mais para renda)</p>
           )}
         </div>
       </div>
@@ -226,7 +229,7 @@ const App: React.FC = () => {
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
         <div className="xl:col-span-1 space-y-8">
-          <TransactionForm onAdd={handleAddTransaction} config={config} />
+          <TransactionForm onAdd={handleAddTransaction} config={config} currentRentBalance={stats.fundBalances.ALUGUER} />
           <FundDistribution stats={stats} />
         </div>
         <div className="xl:col-span-2">
@@ -351,13 +354,17 @@ const App: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-xs font-black text-slate-500 uppercase mb-2">Meta de Reserva de Renda (€)</label>
+            <label className="block text-xs font-black text-slate-500 uppercase mb-2">Valor da Renda Mensal (€)</label>
             <input 
               type="number" 
-              value={config.rentTarget}
-              onChange={(e) => setConfig({...config, rentTarget: parseInt(e.target.value)||0})}
+              value={config.rentAmount}
+              onChange={(e) => {
+                const rentAmount = parseInt(e.target.value) || 0;
+                setConfig({...config, rentAmount, rentTarget: rentAmount * 3});
+              }}
               className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-black text-blue-600" 
             />
+            <p className="text-xs text-slate-500 mt-1">Meta automática: 3x €{config.rentAmount} = €{config.rentTarget}</p>
           </div>
 
           <div className="p-6 bg-blue-50 rounded-2xl border border-blue-100 space-y-4">

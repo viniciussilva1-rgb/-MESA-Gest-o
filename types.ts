@@ -5,6 +5,7 @@ export interface SystemConfig {
   churchName: string;
   fundPercentages: Record<FundType, number>;
   rentTarget: number;
+  rentAmount: number; // Valor da renda mensal (ex: 450€)
   sheetsUrl?: string; // URL do Webhook do Google Apps Script
 }
 
@@ -23,7 +24,7 @@ export interface Transaction {
   description: string;
   amount: number;
   type: 'INCOME' | 'EXPENSE';
-  category: 'DIZIMO' | 'OFERTA' | 'INFANTIL' | 'CONTA' | 'MANUTENCAO' | 'SOCIAL' | 'OUTROS';
+  category: 'DIZIMO' | 'OFERTA' | 'INFANTIL' | 'CONTA' | 'MANUTENCAO' | 'SOCIAL' | 'RENDA' | 'OUTROS';
   fundAllocations: Record<FundType, number>;
   cashCount?: CashCount;
   invoiceRef?: string;

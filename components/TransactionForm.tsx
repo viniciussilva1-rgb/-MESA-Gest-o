@@ -2,14 +2,15 @@
 import React, { useState, useEffect } from 'react';
 import { Transaction, FundType, CashCount, SystemConfig } from '../types';
 import { FUND_INFO } from '../constants';
-import { PlusCircle, MinusCircle, Calculator, Receipt } from 'lucide-react';
+import { PlusCircle, MinusCircle, Calculator, Receipt, Home } from 'lucide-react';
 
 interface Props {
   onAdd: (transaction: Transaction) => void;
   config: SystemConfig;
+  currentRentBalance: number; // Saldo atual do fundo de renda (ALUGUER)
 }
 
-const TransactionForm: React.FC<Props> = ({ onAdd, config }) => {
+const TransactionForm: React.FC<Props> = ({ onAdd, config, currentRentBalance }) => {
   const [type, setType] = useState<'INCOME' | 'EXPENSE'>('INCOME');
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
@@ -42,19 +43,37 @@ const TransactionForm: React.FC<Props> = ({ onAdd, config }) => {
     const val = parseFloat(amount);
     if (isNaN(val) || val <= 0 || !description) return;
 
-    // Fix: updated object keys to match the FundType definition
     let allocations: Record<FundType, number> = {
       ALUGUER: 0, EMERGENCIA: 0, UTILIDADES: 0, GERAL: 0
     };
 
     if (type === 'INCOME') {
-      // Fix: Use dynamic percentages from system config using correct FundType keys
-      allocations.ALUGUER = val * (config.fundPercentages.ALUGUER / 100);
-      allocations.EMERGENCIA = val * (config.fundPercentages.EMERGENCIA / 100);
-      allocations.UTILIDADES = val * (config.fundPercentages.UTILIDADES / 100);
-      allocations.GERAL = val * (config.fundPercentages.GERAL / 100);
+      // Verificar se o fundo de renda já atingiu a meta (3x renda)
+      const rentTargetReached = currentRentBalance >= config.rentTarget;
+      
+      if (rentTargetReached) {
+        // Se já tem a reserva de 3 rendas, os 40% da renda vão para GERAL (disponível)
+        allocations.ALUGUER = 0;
+        allocations.EMERGENCIA = val * (config.fundPercentages.EMERGENCIA / 100);
+        allocations.UTILIDADES = val * (config.fundPercentages.UTILIDADES / 100);
+        // GERAL recebe sua % normal + os % que iriam para ALUGUER
+        allocations.GERAL = val * ((config.fundPercentages.GERAL + config.fundPercentages.ALUGUER) / 100);
+      } else {
+        // Alocação normal quando ainda não atingiu a meta
+        allocations.ALUGUER = val * (config.fundPercentages.ALUGUER / 100);
+        allocations.EMERGENCIA = val * (config.fundPercentages.EMERGENCIA / 100);
+        allocations.UTILIDADES = val * (config.fundPercentages.UTILIDADES / 100);
+        allocations.GERAL = val * (config.fundPercentages.GERAL / 100);
+      }
     } else {
-      allocations[targetFund] = -val;
+      // DESPESA
+      if (category === 'RENDA') {
+        // Pagamento de renda: sai do ALUGUER e automaticamente repõe do saldo disponível
+        // A reposição será feita através de uma transação de transferência interna
+        allocations.ALUGUER = -val;
+      } else {
+        allocations[targetFund] = -val;
+      }
     }
 
     const newTransaction: Transaction = {
@@ -71,6 +90,28 @@ const TransactionForm: React.FC<Props> = ({ onAdd, config }) => {
     };
 
     onAdd(newTransaction);
+    
+    // Se for pagamento de renda, criar transação de reposição automática
+    if (type === 'EXPENSE' && category === 'RENDA') {
+      const repoTransaction: Transaction = {
+        id: crypto.randomUUID(),
+        date: new Date().toISOString(),
+        description: `Reposição automática - Reserva Renda`,
+        amount: val,
+        type: 'EXPENSE', // É uma saída do saldo disponível
+        category: 'OUTROS',
+        fundAllocations: {
+          ALUGUER: val, // Entra no fundo de renda
+          EMERGENCIA: 0,
+          UTILIDADES: 0,
+          GERAL: -val, // Sai do fundo geral (saldo disponível)
+        },
+        invoiceRef: undefined,
+        hasAttachment: false
+      };
+      onAdd(repoTransaction);
+    }
+    
     resetForm();
   };
 
@@ -190,6 +231,7 @@ const TransactionForm: React.FC<Props> = ({ onAdd, config }) => {
                 </>
               ) : (
                 <>
+                  <option value="RENDA">🏠 Pagamento de Renda</option>
                   <option value="CONTA">Contas Fixas</option>
                   <option value="MANUTENCAO">Manutenção</option>
                   <option value="SOCIAL">Social</option>
@@ -223,7 +265,7 @@ const TransactionForm: React.FC<Props> = ({ onAdd, config }) => {
           )}
         </div>
 
-        {type === 'EXPENSE' && (
+        {type === 'EXPENSE' && category !== 'RENDA' && (
            <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Fundo de Origem</label>
             <select
@@ -235,6 +277,18 @@ const TransactionForm: React.FC<Props> = ({ onAdd, config }) => {
                 <option key={key} value={key}>{info.label}</option>
               ))}
             </select>
+          </div>
+        )}
+        
+        {type === 'EXPENSE' && category === 'RENDA' && (
+          <div className="p-4 bg-amber-50 rounded-xl border border-amber-200">
+            <div className="flex items-center gap-2 text-amber-800">
+              <Home size={18} />
+              <span className="text-sm font-semibold">Pagamento de Renda (€{config.rentAmount})</span>
+            </div>
+            <p className="text-xs text-amber-700 mt-2">
+              O valor será retirado da Reserva de Renda e automaticamente reposto a partir do Saldo Disponível.
+            </p>
           </div>
         )}
 
