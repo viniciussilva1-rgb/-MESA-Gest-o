@@ -332,18 +332,18 @@ const TransactionForm: React.FC<Props> = ({ onAdd, config, currentRentBalance })
             >
               {type === 'INCOME' ? (
                 <>
-                  <option value="DIZIMO">💰 Dízimo</option>
-                  <option value="OFERTA">🙏 Oferta</option>
-                  <option value="INFANTIL">👶 Infantil</option>
-                  <option value="OUTROS">📦 Outros</option>
+                  <option value="DIZIMO">Dízimo</option>
+                  <option value="OFERTA">Oferta</option>
+                  <option value="INFANTIL">Infantil</option>
+                  <option value="OUTROS">Outros</option>
                 </>
               ) : (
                 <>
-                  <option value="RENDA">🏠 Pagamento de Renda</option>
-                  <option value="CONTA">💡 Contas Fixas (Água/Luz)</option>
-                  <option value="MANUTENCAO">🔧 Manutenção</option>
-                  <option value="SOCIAL">❤️ Social</option>
-                  <option value="OUTROS">📦 Outros</option>
+                  <option value="RENDA">Pagamento de Renda</option>
+                  <option value="CONTA">Contas Fixas (Água/Luz)</option>
+                  <option value="MANUTENCAO">Manutenção</option>
+                  <option value="SOCIAL">Social</option>
+                  <option value="OUTROS">Outros</option>
                 </>
               )}
             </select>
@@ -372,22 +372,22 @@ const TransactionForm: React.FC<Props> = ({ onAdd, config, currentRentBalance })
                 Distribuição Automática
               </label>
               <div className="px-4 py-3.5 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
-                <div className="grid grid-cols-2 gap-2 text-xs font-bold">
-                  <div className="flex justify-between text-slate-600">
-                    <span>Renda:</span>
-                    <span className="text-amber-600">{config.fundPercentages.ALUGUER}%</span>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+                  <div className="flex items-center justify-between text-slate-600">
+                    <span className="font-medium">Renda</span>
+                    <span className="font-bold text-amber-600">{config.fundPercentages.ALUGUER}%</span>
                   </div>
-                  <div className="flex justify-between text-slate-600">
-                    <span>Emergência:</span>
-                    <span className="text-red-600">{config.fundPercentages.EMERGENCIA}%</span>
+                  <div className="flex items-center justify-between text-slate-600">
+                    <span className="font-medium">Emergência</span>
+                    <span className="font-bold text-red-600">{config.fundPercentages.EMERGENCIA}%</span>
                   </div>
-                  <div className="flex justify-between text-slate-600">
-                    <span>Água/Luz:</span>
-                    <span className="text-blue-600">{config.fundPercentages.UTILIDADES}%</span>
+                  <div className="flex items-center justify-between text-slate-600">
+                    <span className="font-medium">Água/Luz</span>
+                    <span className="font-bold text-blue-600">{config.fundPercentages.UTILIDADES}%</span>
                   </div>
-                  <div className="flex justify-between text-slate-600">
-                    <span>Geral:</span>
-                    <span className="text-emerald-600">{config.fundPercentages.GERAL}%</span>
+                  <div className="flex items-center justify-between text-slate-600">
+                    <span className="font-medium">Geral</span>
+                    <span className="font-bold text-emerald-600">{config.fundPercentages.GERAL}%</span>
                   </div>
                 </div>
               </div>
