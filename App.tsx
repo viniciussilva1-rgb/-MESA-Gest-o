@@ -18,7 +18,7 @@ import { subscribeToAuthState, logout } from './services/authService';
 import { exportToExcel } from './services/exportService';
 import { 
   Wallet, TrendingUp, TrendingDown, History, Sparkles, 
-  Menu, Bell, LayoutDashboard, Landmark, Settings, FileText, Printer, ChevronRight, Search, Trash2, Cloud, CloudUpload, ExternalLink, CheckCircle2, AlertCircle, Database, LogOut, Download, FileSpreadsheet
+  Menu, Bell, LayoutDashboard, Landmark, Settings, FileText, Printer, ChevronRight, Search, Trash2, Cloud, CloudUpload, ExternalLink, CheckCircle2, AlertCircle, Database, LogOut, Download, FileSpreadsheet, RefreshCw
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -326,6 +326,73 @@ const App: React.FC = () => {
     }
   };
 
+  // Função para recalcular alocações de todas as transações com as percentagens atuais
+  const recalcularAlocacoes = async () => {
+    if (!confirm('Isto irá recalcular todas as alocações de entradas com as percentagens atuais. Transações de saída não serão alteradas. Continuar?')) {
+      return;
+    }
+
+    let recalculadas = 0;
+    let saldoRenda = 0; // Rastreamos o saldo de renda para simular o preenchimento prioritário
+
+    // Ordenar por data para processar na ordem correta
+    const sortedTransactions = [...transactions].sort((a, b) => 
+      new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
+
+    for (const tx of sortedTransactions) {
+      // Só recalcula entradas que não são INFANTIL nem transferências
+      if (tx.type !== 'INCOME') {
+        // Atualizar saldo de renda baseado nas saídas
+        if (tx.category === 'RENDA') {
+          saldoRenda -= tx.amount;
+        } else if (tx.description.toLowerCase().includes('reposição automática')) {
+          saldoRenda += tx.amount; // Reposição adiciona de volta
+        }
+        continue;
+      }
+      
+      if (tx.category === 'INFANTIL') continue;
+
+      const val = tx.amount;
+      let newAllocations: Record<FundType, number> = {
+        ALUGUER: 0, EMERGENCIA: 0, UTILIDADES: 0, GERAL: 0, INFANTIL: 0
+      };
+
+      // Verificar quanto falta para completar a meta de €1350 na reserva de renda
+      const rentaMissing = Math.max(0, config.rentTarget - saldoRenda);
+      
+      if (rentaMissing > 0) {
+        const rentaAllocation = Math.min(val, rentaMissing);
+        newAllocations.ALUGUER = rentaAllocation;
+        saldoRenda += rentaAllocation;
+        
+        const remaining = val - rentaAllocation;
+        if (remaining > 0) {
+          const totalOtherPercentages = config.fundPercentages.EMERGENCIA + config.fundPercentages.UTILIDADES + config.fundPercentages.GERAL;
+          newAllocations.EMERGENCIA = remaining * (config.fundPercentages.EMERGENCIA / totalOtherPercentages);
+          newAllocations.UTILIDADES = remaining * (config.fundPercentages.UTILIDADES / totalOtherPercentages);
+          newAllocations.GERAL = remaining * (config.fundPercentages.GERAL / totalOtherPercentages);
+        }
+      } else {
+        const totalOtherPercentages = config.fundPercentages.EMERGENCIA + config.fundPercentages.UTILIDADES + config.fundPercentages.GERAL;
+        newAllocations.EMERGENCIA = val * (config.fundPercentages.EMERGENCIA / totalOtherPercentages);
+        newAllocations.UTILIDADES = val * (config.fundPercentages.UTILIDADES / totalOtherPercentages);
+        newAllocations.GERAL = val * (config.fundPercentages.GERAL / totalOtherPercentages);
+      }
+
+      // Atualizar no Firebase
+      try {
+        await addTransactionToFirestore({ ...tx, fundAllocations: newAllocations });
+        recalculadas++;
+      } catch (error) {
+        console.error('Erro ao recalcular transação:', tx.id, error);
+      }
+    }
+
+    alert(`${recalculadas} transação(ões) recalculada(s) com sucesso!`);
+  };
+
   const renderDashboard = () => (
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -608,6 +675,16 @@ const App: React.FC = () => {
               <span className="flex items-center gap-2"><Sparkles size={16} /> Total da Distribuição:</span>
               <span className="text-lg">{Object.values(config.fundPercentages).reduce((a: number, b: number) => a + b, 0)}%</span>
             </div>
+            
+            <button 
+              onClick={recalcularAlocacoes} 
+              className="mt-4 w-full py-3 bg-blue-600 text-white font-bold hover:bg-blue-700 rounded-xl transition-all flex items-center justify-center gap-2"
+            >
+              <RefreshCw size={16} /> Recalcular Todas as Alocações
+            </button>
+            <p className="text-xs text-slate-500 text-center mt-2">
+              Use este botão para aplicar as novas percentagens a todas as transações existentes
+            </p>
           </div>
           
           <div className="pt-8 border-t border-slate-100 flex flex-col gap-3">
