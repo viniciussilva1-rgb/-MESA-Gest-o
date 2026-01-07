@@ -1,0 +1,139 @@
+import React, { useState } from 'react';
+import { loginWithEmail, createInitialUser } from '../services/authService';
+import { Landmark, Mail, Lock, LogIn, AlertCircle, Loader2 } from 'lucide-react';
+
+interface LoginScreenProps {
+  onLoginSuccess: () => void;
+}
+
+const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setIsLoading(true);
+
+    try {
+      await loginWithEmail(email, password);
+      onLoginSuccess();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Função para criar o usuário inicial (executar apenas uma vez)
+  const handleCreateInitialUser = async () => {
+    setIsCreatingUser(true);
+    setError('');
+    try {
+      await createInitialUser('amesalourinha@gmail.com', 'Jesusreinaaqui2025');
+      setError('');
+      alert('✅ Usuário criado com sucesso! Agora faça login.');
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsCreatingUser(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        {/* Logo e Título */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-blue-600 rounded-3xl mb-6 shadow-2xl shadow-blue-500/30">
+            <Landmark size={40} className="text-white" />
+          </div>
+          <h1 className="text-4xl font-black text-white tracking-tighter mb-2">À MESA</h1>
+          <p className="text-slate-400 font-medium">Gestão Financeira Ministerial</p>
+        </div>
+
+        {/* Card de Login */}
+        <div className="bg-white rounded-3xl p-8 shadow-2xl">
+          <h2 className="text-xl font-black text-slate-800 mb-6 text-center">Acesso à Tesouraria</h2>
+          
+          <form onSubmit={handleLogin} className="space-y-5">
+            <div>
+              <label className="block text-xs font-black text-slate-500 uppercase mb-2">Email</label>
+              <div className="relative">
+                <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="seu@email.com"
+                  className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-medium transition-all"
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-black text-slate-500 uppercase mb-2">Senha</label>
+              <div className="relative">
+                <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-medium transition-all"
+                  required
+                />
+              </div>
+            </div>
+
+            {error && (
+              <div className="flex items-center gap-2 p-4 bg-red-50 border border-red-100 rounded-xl text-red-600 text-sm font-medium">
+                <AlertCircle size={18} />
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full py-4 bg-slate-900 text-white rounded-xl font-black uppercase tracking-widest hover:bg-black transition-all shadow-lg active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 size={20} className="animate-spin" />
+                  Entrando...
+                </>
+              ) : (
+                <>
+                  <LogIn size={20} />
+                  Entrar
+                </>
+              )}
+            </button>
+          </form>
+
+          {/* Botão oculto para criar usuário inicial - remover após uso */}
+          <div className="mt-6 pt-6 border-t border-slate-100">
+            <button
+              onClick={handleCreateInitialUser}
+              disabled={isCreatingUser}
+              className="w-full py-3 text-xs text-slate-400 hover:text-blue-600 font-bold transition-all"
+            >
+              {isCreatingUser ? 'Criando usuário...' : '🔐 Criar usuário inicial (usar apenas uma vez)'}
+            </button>
+          </div>
+        </div>
+
+        <p className="text-center text-slate-500 text-xs mt-8 font-medium">
+          © 2025 Igreja À MESA • Sistema de Gestão Financeira
+        </p>
+      </div>
+    </div>
+  );
+};
+
+export default LoginScreen;

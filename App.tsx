@@ -1,9 +1,11 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
+import { User } from 'firebase/auth';
 import { Transaction, FinancialStats, FundType, SystemConfig } from './types';
 import { FUND_INFO } from './constants';
 import TransactionForm from './components/TransactionForm';
 import DashboardCharts from './components/DashboardCharts';
+import LoginScreen from './components/LoginScreen';
 import { getFinancialInsights } from './services/geminiService';
 import { 
   subscribeToTransactions, 
@@ -12,12 +14,15 @@ import {
   saveConfig,
   migrateFromLocalStorage 
 } from './services/firestoreService';
+import { subscribeToAuthState, logout } from './services/authService';
 import { 
   Wallet, TrendingUp, TrendingDown, History, Sparkles, 
-  Menu, Bell, LayoutDashboard, Landmark, Settings, FileText, Printer, ChevronRight, Search, Trash2, Cloud, CloudUpload, ExternalLink, CheckCircle2, AlertCircle, Database
+  Menu, Bell, LayoutDashboard, Landmark, Settings, FileText, Printer, ChevronRight, Search, Trash2, Cloud, CloudUpload, ExternalLink, CheckCircle2, AlertCircle, Database, LogOut
 } from 'lucide-react';
 
 const App: React.FC = () => {
+  const [user, setUser] = useState<User | null>(null);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'TRANSACTIONS' | 'REPORTS' | 'SETTINGS'>('DASHBOARD');
   const [syncStatus, setSyncStatus] = useState<'IDLE' | 'SYNCING' | 'SUCCESS' | 'ERROR'>('IDLE');
   const [isLoadingData, setIsLoadingData] = useState(true);
@@ -39,8 +44,22 @@ const App: React.FC = () => {
   const [isLoadingInsight, setIsLoadingInsight] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  // Migrar dados do localStorage para Firebase (apenas uma vez)
+  // Verificar autenticação
   useEffect(() => {
+    const unsubscribe = subscribeToAuthState((firebaseUser) => {
+      setUser(firebaseUser);
+      setIsCheckingAuth(false);
+      if (!firebaseUser) {
+        setIsLoadingData(false);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Migrar dados do localStorage para Firebase (apenas uma vez, após login)
+  useEffect(() => {
+    if (!user) return;
+    
     const checkAndMigrate = async () => {
       const hasLocalData = localStorage.getItem('gestao_a_mesa_data') || localStorage.getItem('gestao_a_mesa_config');
       if (hasLocalData) {
@@ -58,26 +77,36 @@ const App: React.FC = () => {
       }
     };
     checkAndMigrate();
-  }, []);
+  }, [user]);
 
-  // Escutar transações do Firebase em tempo real
+  // Escutar transações do Firebase em tempo real (apenas após login)
   useEffect(() => {
+    if (!user) return;
+    
     const unsubscribe = subscribeToTransactions((firebaseTransactions) => {
       setTransactions(firebaseTransactions);
       setIsLoadingData(false);
     });
     return () => unsubscribe();
-  }, []);
+  }, [user]);
 
-  // Escutar configurações do Firebase em tempo real
+  // Escutar configurações do Firebase em tempo real (apenas após login)
   useEffect(() => {
+    if (!user) return;
+    
     const unsubscribe = subscribeToConfig((firebaseConfig) => {
       if (firebaseConfig) {
         setConfig(firebaseConfig);
       }
     });
     return () => unsubscribe();
-  }, []);
+  }, [user]);
+
+  const handleLogout = async () => {
+    if (confirm('Deseja realmente sair do sistema?')) {
+      await logout();
+    }
+  };
 
   const stats = useMemo((): FinancialStats => {
     const fundBalances: Record<FundType, number> = { ALUGUER: 0, EMERGENCIA: 0, UTILIDADES: 0, GERAL: 0 };
@@ -462,6 +491,23 @@ const App: React.FC = () => {
     </div>
   );
 
+  // Tela de carregamento enquanto verifica autenticação
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-400 font-bold">Verificando autenticação...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Tela de login se não estiver autenticado
+  if (!user) {
+    return <LoginScreen onLoginSuccess={() => {}} />;
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 flex">
       {isSidebarOpen && <div className="fixed inset-0 bg-slate-900/50 z-40 lg:hidden" onClick={() => setIsSidebarOpen(false)} />}
@@ -481,14 +527,17 @@ const App: React.FC = () => {
             <NavBtn active={activeTab === 'SETTINGS'} onClick={() => setActiveTab('SETTINGS')} icon={<Settings size={20} />} label="Definições" />
           </nav>
         </div>
-        <div className="absolute bottom-6 left-6 right-6">
+        <div className="absolute bottom-6 left-6 right-6 space-y-3">
           <div className="bg-white/5 border border-white/10 p-4 rounded-2xl backdrop-blur-sm">
-             <p className="text-[10px] uppercase font-black text-slate-500 mb-1 tracking-widest">Sincronização Cloud</p>
-             <div className="text-xs font-bold text-white flex items-center gap-2">
-               <div className={`w-2 h-2 rounded-full ${config.sheetsUrl ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} /> 
-               {config.sheetsUrl ? 'Backup Ativo' : 'Backup Pendente'}
-             </div>
+             <p className="text-[10px] uppercase font-black text-slate-500 mb-1 tracking-widest">Usuário Logado</p>
+             <div className="text-xs font-bold text-white truncate">{user.email}</div>
           </div>
+          <button 
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl text-xs font-bold transition-all"
+          >
+            <LogOut size={16} /> Sair do Sistema
+          </button>
         </div>
       </aside>
 
