@@ -41,23 +41,41 @@ export const subscribeToTransactions = (
 
 export const addTransaction = async (transaction: Transaction): Promise<void> => {
   console.log('=== FIRESTORE: Iniciando addTransaction ===');
-  console.log('Dados da transação:', JSON.stringify(transaction, null, 2));
   
   try {
     const { id, ...transactionData } = transaction;
-    console.log('Enviando para collection:', TRANSACTIONS_COLLECTION);
     
-    const docRef = await addDoc(collection(db, TRANSACTIONS_COLLECTION), {
-      ...transactionData,
+    // Limpar campos undefined (Firestore não aceita)
+    const cleanData: any = {
+      date: transactionData.date,
+      description: transactionData.description,
+      amount: transactionData.amount,
+      type: transactionData.type,
+      category: transactionData.category,
+      fundAllocations: transactionData.fundAllocations,
       createdAt: new Date().toISOString()
-    });
+    };
+    
+    // Só adiciona campos opcionais se tiverem valor
+    if (transactionData.invoiceRef) {
+      cleanData.invoiceRef = transactionData.invoiceRef;
+    }
+    if (transactionData.hasAttachment) {
+      cleanData.hasAttachment = transactionData.hasAttachment;
+    }
+    if (transactionData.cashCount) {
+      cleanData.cashCount = transactionData.cashCount;
+    }
+    
+    console.log('Dados limpos para enviar:', JSON.stringify(cleanData, null, 2));
+    
+    const docRef = await addDoc(collection(db, TRANSACTIONS_COLLECTION), cleanData);
     
     console.log('Transação salva com sucesso! ID:', docRef.id);
   } catch (error: any) {
     console.error('=== FIRESTORE: ERRO ao adicionar ===');
     console.error('Código:', error?.code);
     console.error('Mensagem:', error?.message);
-    console.error('Erro completo:', error);
     throw error;
   }
 };
