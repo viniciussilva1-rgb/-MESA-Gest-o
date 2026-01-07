@@ -180,27 +180,6 @@ const App: React.FC = () => {
         <SummaryCard icon={<FileText size={24} />} title="Reserva Renda" value={formatCurrency(stats.fundBalances.ALUGUER)} color="amber" />
       </section>
 
-      <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest">Meta de Reserva de Renda (3x €{config.rentAmount} = €{config.rentTarget})</h3>
-          <span className="text-sm font-black text-blue-600">
-            {formatCurrency(stats.fundBalances.ALUGUER)} acumulados
-          </span>
-        </div>
-        <div className="w-full bg-slate-100 h-4 rounded-full overflow-hidden shadow-inner border border-slate-200">
-          <div 
-            className={`h-full rounded-full transition-all duration-1000 ${stats.fundBalances.ALUGUER >= config.rentTarget ? 'bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.5)]' : 'bg-blue-500'}`}
-            style={{ width: `${Math.min(100, (stats.fundBalances.ALUGUER / config.rentTarget) * 100)}%` }}
-          />
-        </div>
-        <div className="flex justify-between mt-2">
-          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Faltam {formatCurrency(Math.max(0, config.rentTarget - stats.fundBalances.ALUGUER))} para os 3 meses de reserva</p>
-          {stats.fundBalances.ALUGUER >= config.rentTarget && (
-            <p className="text-[10px] font-black text-emerald-600 uppercase">✅ Reserva de 3 Rendas Atingida! (40% não vai mais para renda)</p>
-          )}
-        </div>
-      </div>
-
       <section className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl p-8 text-white shadow-2xl relative overflow-hidden">
         <div className="absolute top-0 right-0 p-8 opacity-5"><Sparkles size={140} /></div>
         <div className="relative z-10">
