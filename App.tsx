@@ -786,16 +786,9 @@ const App: React.FC = () => {
               <p className="text-slate-500 font-bold uppercase text-xs tracking-widest">Relatório Mensal de Gestão Financeira</p>
             </div>
           </div>
-          <div className="text-right flex flex-col items-end gap-2 print:hidden">
+          <div className="text-right flex items-center gap-3 print:hidden">
             <button onClick={() => window.print()} className="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-xl hover:bg-black transition-all shadow-lg font-bold">
-              <Printer size={20} /> Imprimir
-            </button>
-            <button 
-              onClick={baixarPDF} 
-              disabled={isGeneratingPDF}
-              className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all shadow-lg font-bold disabled:opacity-50"
-            >
-              <Download size={20} /> {isGeneratingPDF ? 'Gerando...' : 'Baixar PDF'}
+              <Printer size={20} /> Imprimir / Salvar PDF
             </button>
           </div>
         </div>
