@@ -328,6 +328,55 @@ const App: React.FC = () => {
     }
   };
 
+  // Função para remover transações duplicadas
+  const removerDuplicados = async () => {
+    // Agrupar transações por chave única (descrição + valor + categoria + tipo)
+    const grupos: Record<string, Transaction[]> = {};
+    
+    transactions.forEach(tx => {
+      const chave = `${tx.description}|${tx.amount}|${tx.category}|${tx.type}`;
+      if (!grupos[chave]) {
+        grupos[chave] = [];
+      }
+      grupos[chave].push(tx);
+    });
+    
+    // Encontrar grupos com mais de uma transação (duplicados)
+    const duplicados: Transaction[] = [];
+    Object.values(grupos).forEach(grupo => {
+      if (grupo.length > 1) {
+        // Ordenar por data e manter apenas o mais antigo
+        grupo.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        // Adicionar todos exceto o primeiro (mais antigo) à lista de duplicados
+        duplicados.push(...grupo.slice(1));
+      }
+    });
+    
+    if (duplicados.length === 0) {
+      alert('Não foram encontradas transações duplicadas.');
+      return;
+    }
+    
+    const lista = duplicados.slice(0, 10).map(t => `- ${t.description}: €${t.amount.toFixed(2)}`).join('\n');
+    const mais = duplicados.length > 10 ? `\n... e mais ${duplicados.length - 10} duplicados` : '';
+    
+    if (!confirm(`Encontrados ${duplicados.length} duplicado(s):\n\n${lista}${mais}\n\nDeseja remover os duplicados? (mantém a transação original)`)) {
+      return;
+    }
+    
+    let removidos = 0;
+    for (const tx of duplicados) {
+      try {
+        await deleteTransactionFromFirestore(tx.id);
+        removidos++;
+      } catch (error) {
+        console.error('Erro ao remover duplicado:', tx.id, error);
+      }
+    }
+    
+    alert(`✅ ${removidos} duplicado(s) removido(s) com sucesso!`);
+  };
+
   // Função para limpar TODAS transações internas (reposições e transferências)
   const limparTransferenciasInternas = async () => {
     const transferencias = transactions.filter(tx => 
@@ -746,6 +795,12 @@ const App: React.FC = () => {
               <p className="text-xs font-bold text-amber-800 mb-3">⚠️ Para corrigir valores após mudar percentagens:</p>
               <div className="space-y-2">
                 <button 
+                  onClick={removerDuplicados} 
+                  className="w-full py-2 bg-red-500 text-white font-bold hover:bg-red-600 rounded-lg transition-all flex items-center justify-center gap-2 text-sm"
+                >
+                  <Trash2 size={14} /> 🔴 Remover Duplicados
+                </button>
+                <button 
                   onClick={limparTransferenciasInternas} 
                   className="w-full py-2 bg-amber-500 text-white font-bold hover:bg-amber-600 rounded-lg transition-all flex items-center justify-center gap-2 text-sm"
                 >
@@ -759,7 +814,7 @@ const App: React.FC = () => {
                 </button>
               </div>
               <p className="text-[10px] text-amber-700 text-center mt-2">
-                Execute na ordem: primeiro limpe, depois recalcule
+                Se houver duplicados, remova-os primeiro!
               </p>
             </div>
           </div>
