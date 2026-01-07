@@ -142,12 +142,27 @@ const App: React.FC = () => {
   };
 
   const stats = useMemo((): FinancialStats => {
-    const fundBalances: Record<FundType, number> = { ALUGUER: 0, EMERGENCIA: 0, UTILIDADES: 0, GERAL: 0 };
+    const fundBalances: Record<FundType, number> = { ALUGUER: 0, EMERGENCIA: 0, UTILIDADES: 0, GERAL: 0, INFANTIL: 0 };
     let totalIncome = 0; let totalExpenses = 0;
+    let infantilIncome = 0; let infantilExpenses = 0;
     
     transactions.forEach((tx) => {
-      if (tx.type === 'INCOME') totalIncome += tx.amount;
-      else totalExpenses += tx.amount;
+      // Separar valores do ministério infantil
+      const isInfantil = tx.category === 'INFANTIL';
+      
+      if (tx.type === 'INCOME') {
+        if (isInfantil) {
+          infantilIncome += tx.amount;
+        } else {
+          totalIncome += tx.amount;
+        }
+      } else {
+        if (isInfantil) {
+          infantilExpenses += tx.amount;
+        } else {
+          totalExpenses += tx.amount;
+        }
+      }
       
       Object.entries(tx.fundAllocations).forEach(([fund, val]) => {
         if (fund in fundBalances) {
@@ -155,7 +170,14 @@ const App: React.FC = () => {
         }
       });
     });
-    return { totalIncome, totalExpenses, netBalance: totalIncome - totalExpenses, fundBalances };
+    return { 
+      totalIncome, 
+      totalExpenses, 
+      netBalance: totalIncome - totalExpenses, 
+      fundBalances,
+      infantilIncome,
+      infantilExpenses
+    };
   }, [transactions]);
 
   const chartHistory = useMemo(() => {
@@ -277,6 +299,7 @@ const App: React.FC = () => {
         EMERGENCIA: 0,
         UTILIDADES: 0,
         GERAL: -valorTransferir,
+        INFANTIL: 0,
       }
     };
     
@@ -304,9 +327,9 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
         <SummaryCard icon={<Wallet size={24} />} title="Saldo Disponível" value={formatCurrency(stats.fundBalances.UTILIDADES + stats.fundBalances.GERAL)} color="blue" />
-        <SummaryCard icon={<TrendingUp size={24} />} title="Entradas" value={formatCurrency(stats.totalIncome)} color="emerald" />
+        <SummaryCard icon={<TrendingUp size={24} />} title="Entradas Igreja" value={formatCurrency(stats.totalIncome)} color="emerald" />
         <SummaryCard icon={<Landmark size={24} />} title="Emergência" value={formatCurrency(stats.fundBalances.EMERGENCIA)} color="red" />
         
         {/* Card especial da Reserva Renda com botão para completar */}
@@ -329,6 +352,22 @@ const App: React.FC = () => {
           {stats.fundBalances.ALUGUER >= config.rentTarget && (
             <p className="mt-3 text-xs text-emerald-600 font-bold">Meta atingida</p>
           )}
+        </div>
+        
+        {/* Card do Ministério Infantil - separado */}
+        <div className="bg-white p-5 rounded-3xl shadow-sm border border-purple-100 hover:shadow-md transition-all">
+          <div className="flex items-center justify-between mb-4">
+            <div className="p-3 rounded-2xl bg-purple-50 text-purple-600">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+            </div>
+            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Min. Infantil</span>
+          </div>
+          <h3 className="text-2xl font-black text-slate-900 tracking-tighter">{formatCurrency(stats.fundBalances.INFANTIL)}</h3>
+          <p className="text-[10px] text-slate-500 mt-1">
+            <span className="text-emerald-600">+{formatCurrency(stats.infantilIncome)}</span>
+            {' / '}
+            <span className="text-red-600">-{formatCurrency(stats.infantilExpenses)}</span>
+          </p>
         </div>
       </section>
 

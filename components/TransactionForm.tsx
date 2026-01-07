@@ -67,38 +67,46 @@ const TransactionForm: React.FC<Props> = ({ onAdd, config, currentRentBalance })
     setIsSubmitting(true);
 
     let allocations: Record<FundType, number> = {
-      ALUGUER: 0, EMERGENCIA: 0, UTILIDADES: 0, GERAL: 0
+      ALUGUER: 0, EMERGENCIA: 0, UTILIDADES: 0, GERAL: 0, INFANTIL: 0
     };
 
     if (type === 'INCOME') {
-      // Verificar quanto falta para completar a meta de €1350 na reserva de renda
-      const rentaMissing = Math.max(0, config.rentTarget - currentRentBalance);
-      
-      if (rentaMissing > 0) {
-        // Primeiro, completar a reserva de renda até €1350
-        const rentaAllocation = Math.min(val, rentaMissing);
-        allocations.ALUGUER = rentaAllocation;
-        
-        // O restante vai para os outros fundos proporcionalmente
-        const remaining = val - rentaAllocation;
-        if (remaining > 0) {
-          // Distribui o restante entre Emergência, Água/Luz e Geral (sem a Renda)
-          const totalOtherPercentages = config.fundPercentages.EMERGENCIA + config.fundPercentages.UTILIDADES + config.fundPercentages.GERAL;
-          allocations.EMERGENCIA = remaining * (config.fundPercentages.EMERGENCIA / totalOtherPercentages);
-          allocations.UTILIDADES = remaining * (config.fundPercentages.UTILIDADES / totalOtherPercentages);
-          allocations.GERAL = remaining * (config.fundPercentages.GERAL / totalOtherPercentages);
-        }
+      // Se for categoria INFANTIL, vai 100% para o fundo infantil (separado da igreja)
+      if (category === 'INFANTIL') {
+        allocations.INFANTIL = val;
       } else {
-        // Meta atingida - distribui tudo entre os outros fundos
-        const totalOtherPercentages = config.fundPercentages.EMERGENCIA + config.fundPercentages.UTILIDADES + config.fundPercentages.GERAL;
-        allocations.ALUGUER = 0;
-        allocations.EMERGENCIA = val * (config.fundPercentages.EMERGENCIA / totalOtherPercentages);
-        allocations.UTILIDADES = val * (config.fundPercentages.UTILIDADES / totalOtherPercentages);
-        allocations.GERAL = val * (config.fundPercentages.GERAL / totalOtherPercentages);
+        // Verificar quanto falta para completar a meta de €1350 na reserva de renda
+        const rentaMissing = Math.max(0, config.rentTarget - currentRentBalance);
+        
+        if (rentaMissing > 0) {
+          // Primeiro, completar a reserva de renda até €1350
+          const rentaAllocation = Math.min(val, rentaMissing);
+          allocations.ALUGUER = rentaAllocation;
+          
+          // O restante vai para os outros fundos proporcionalmente
+          const remaining = val - rentaAllocation;
+          if (remaining > 0) {
+            // Distribui o restante entre Emergência, Água/Luz e Geral (sem a Renda)
+            const totalOtherPercentages = config.fundPercentages.EMERGENCIA + config.fundPercentages.UTILIDADES + config.fundPercentages.GERAL;
+            allocations.EMERGENCIA = remaining * (config.fundPercentages.EMERGENCIA / totalOtherPercentages);
+            allocations.UTILIDADES = remaining * (config.fundPercentages.UTILIDADES / totalOtherPercentages);
+            allocations.GERAL = remaining * (config.fundPercentages.GERAL / totalOtherPercentages);
+          }
+        } else {
+          // Meta atingida - distribui tudo entre os outros fundos
+          const totalOtherPercentages = config.fundPercentages.EMERGENCIA + config.fundPercentages.UTILIDADES + config.fundPercentages.GERAL;
+          allocations.ALUGUER = 0;
+          allocations.EMERGENCIA = val * (config.fundPercentages.EMERGENCIA / totalOtherPercentages);
+          allocations.UTILIDADES = val * (config.fundPercentages.UTILIDADES / totalOtherPercentages);
+          allocations.GERAL = val * (config.fundPercentages.GERAL / totalOtherPercentages);
+        }
       }
     } else {
       if (category === 'RENDA') {
         allocations.ALUGUER = -val;
+      } else if (category === 'INFANTIL') {
+        // Saída do ministério infantil
+        allocations.INFANTIL = -val;
       } else {
         allocations[targetFund] = -val;
       }
@@ -334,7 +342,7 @@ const TransactionForm: React.FC<Props> = ({ onAdd, config, currentRentBalance })
                 <>
                   <option value="DIZIMO">Dízimo</option>
                   <option value="OFERTA">Oferta</option>
-                  <option value="INFANTIL">Infantil</option>
+                  <option value="INFANTIL">Ministério Infantil</option>
                   <option value="OUTROS">Outros</option>
                 </>
               ) : (
@@ -343,13 +351,14 @@ const TransactionForm: React.FC<Props> = ({ onAdd, config, currentRentBalance })
                   <option value="CONTA">Contas Fixas (Água/Luz)</option>
                   <option value="MANUTENCAO">Manutenção</option>
                   <option value="SOCIAL">Social</option>
+                  <option value="INFANTIL">Ministério Infantil</option>
                   <option value="OUTROS">Outros</option>
                 </>
               )}
             </select>
           </div>
           
-          {type === 'EXPENSE' && category !== 'RENDA' ? (
+          {type === 'EXPENSE' && category !== 'RENDA' && category !== 'INFANTIL' ? (
             <div className="space-y-1.5">
               <label className="text-sm font-semibold text-slate-700">Retirar do Fundo</label>
               <select
@@ -357,10 +366,24 @@ const TransactionForm: React.FC<Props> = ({ onAdd, config, currentRentBalance })
                 onChange={(e) => setTargetFund(e.target.value as FundType)}
                 className="w-full px-3 py-2.5 bg-white text-slate-900 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none text-sm transition-all appearance-none cursor-pointer"
               >
-                {Object.entries(FUND_INFO).map(([key, info]) => (
+                {Object.entries(FUND_INFO).filter(([key]) => key !== 'INFANTIL').map(([key, info]) => (
                   <option key={key} value={key}>{info.label}</option>
                 ))}
               </select>
+            </div>
+          ) : type === 'EXPENSE' && category === 'INFANTIL' ? (
+            <div className="space-y-1.5">
+              <label className="text-sm font-semibold text-slate-700">Fundo</label>
+              <div className="px-3 py-2.5 bg-purple-50 rounded-xl border border-purple-200 text-xs text-purple-700 font-semibold">
+                Sai do saldo do Ministério Infantil
+              </div>
+            </div>
+          ) : type === 'INCOME' && category === 'INFANTIL' ? (
+            <div className="space-y-1.5">
+              <label className="text-sm font-semibold text-slate-700">Fundo</label>
+              <div className="px-3 py-2.5 bg-purple-50 rounded-xl border border-purple-200 text-xs text-purple-700 font-semibold">
+                100% para o Ministério Infantil (separado)
+              </div>
             </div>
           ) : type === 'INCOME' ? (
             <div className="space-y-1.5">

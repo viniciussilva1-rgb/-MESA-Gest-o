@@ -1,5 +1,5 @@
 
-export type FundType = 'ALUGUER' | 'EMERGENCIA' | 'UTILIDADES' | 'GERAL';
+export type FundType = 'ALUGUER' | 'EMERGENCIA' | 'UTILIDADES' | 'GERAL' | 'INFANTIL';
 
 export interface SystemConfig {
   churchName: string;
@@ -36,4 +36,7 @@ export interface FinancialStats {
   totalExpenses: number;
   netBalance: number;
   fundBalances: Record<FundType, number>;
+  // Valores separados do infantil (não contam no saldo da igreja)
+  infantilIncome: number;
+  infantilExpenses: number;
 }

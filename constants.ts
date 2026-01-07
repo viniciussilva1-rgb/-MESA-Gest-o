@@ -6,4 +6,5 @@ export const FUND_INFO: Record<FundType, { label: string; color: string }> = {
   EMERGENCIA: { label: 'Emergência (10%)', color: '#ef4444' },
   UTILIDADES: { label: 'Água e Luz', color: '#f59e0b' },
   GERAL: { label: 'Geral (Equip./Manut.)', color: '#10b981' },
+  INFANTIL: { label: 'Ministério Infantil', color: '#8b5cf6' },
 };
