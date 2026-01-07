@@ -231,22 +231,6 @@ const App: React.FC = () => {
           <h2 className="text-2xl font-black text-slate-900 tracking-tight">Paz do Senhor, Tesouraria!</h2>
           <p className="text-slate-500 text-sm font-medium">Aqui está o resumo financeiro de hoje.</p>
         </div>
-        <button 
-          onClick={syncToSheets}
-          disabled={syncStatus === 'SYNCING'}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl font-bold text-sm transition-all shadow-lg active:scale-95 ${
-            syncStatus === 'SYNCING' ? 'bg-slate-200 text-slate-400' :
-            syncStatus === 'SUCCESS' ? 'bg-emerald-500 text-white' :
-            syncStatus === 'ERROR' ? 'bg-red-500 text-white' :
-            'bg-blue-600 text-white hover:bg-blue-700'
-          }`}
-        >
-          {syncStatus === 'SYNCING' ? <Cloud className="animate-bounce" size={18} /> : <CloudUpload size={18} />}
-          {syncStatus === 'SYNCING' ? 'Sincronizando...' : 
-           syncStatus === 'SUCCESS' ? 'Sincronizado!' :
-           syncStatus === 'ERROR' ? 'Erro ao Sincronizar' :
-           'Backup Google Sheets'}
-        </button>
       </div>
 
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
