@@ -11,6 +11,8 @@ import {
   subscribeToTransactions, 
   subscribeToConfig, 
   addTransaction as addTransactionToFirestore, 
+  updateTransaction as updateTransactionInFirestore,
+  deleteTransaction as deleteTransactionFromFirestore,
   saveConfig,
   migrateFromLocalStorage 
 } from './services/firestoreService';
@@ -326,9 +328,47 @@ const App: React.FC = () => {
     }
   };
 
+  // Função para limpar transações de reposição automática (causam duplicação)
+  const limparReposicoesAutomaticas = async () => {
+    const reposicoes = transactions.filter(tx => 
+      tx.description.toLowerCase().includes('reposição automática')
+    );
+    
+    if (reposicoes.length === 0) {
+      alert('Não há transações de reposição automática para remover.');
+      return;
+    }
+    
+    if (!confirm(`Encontradas ${reposicoes.length} transação(ões) de reposição automática. Deseja removê-las? Isto irá corrigir valores duplicados na Reserva de Renda.`)) {
+      return;
+    }
+    
+    let removidas = 0;
+    for (const tx of reposicoes) {
+      try {
+        await deleteTransactionFromFirestore(tx.id);
+        removidas++;
+      } catch (error) {
+        console.error('Erro ao remover reposição:', tx.id, error);
+      }
+    }
+    
+    alert(`${removidas} transação(ões) de reposição automática removida(s). Agora recalcule as alocações.`);
+  };
+
   // Função para recalcular alocações de todas as transações com as percentagens atuais
   const recalcularAlocacoes = async () => {
-    if (!confirm('Isto irá recalcular todas as alocações de entradas com as percentagens atuais. Transações de saída não serão alteradas. Continuar?')) {
+    // Verificar se há reposições automáticas que precisam ser removidas primeiro
+    const temReposicoes = transactions.some(tx => 
+      tx.description.toLowerCase().includes('reposição automática')
+    );
+    
+    if (temReposicoes) {
+      alert('Existem transações de "Reposição automática" que podem causar duplicação. Remova-as primeiro clicando em "Limpar Reposições Automáticas".');
+      return;
+    }
+    
+    if (!confirm('Isto irá recalcular todas as alocações de entradas com as percentagens atuais. Continuar?')) {
       return;
     }
 
@@ -341,17 +381,19 @@ const App: React.FC = () => {
     );
 
     for (const tx of sortedTransactions) {
-      // Só recalcula entradas que não são INFANTIL nem transferências
+      // Ignorar transferências internas
+      const isTransferenciaInterna = tx.description.toLowerCase().includes('transferência');
+      if (isTransferenciaInterna) continue;
+      
+      // Para saídas, apenas rastrear o impacto na reserva de renda
       if (tx.type !== 'INCOME') {
-        // Atualizar saldo de renda baseado nas saídas
         if (tx.category === 'RENDA') {
-          saldoRenda -= tx.amount;
-        } else if (tx.description.toLowerCase().includes('reposição automática')) {
-          saldoRenda += tx.amount; // Reposição adiciona de volta
+          saldoRenda = Math.max(0, saldoRenda - tx.amount);
         }
         continue;
       }
       
+      // Ignorar entradas do ministério infantil
       if (tx.category === 'INFANTIL') continue;
 
       const val = tx.amount;
@@ -359,7 +401,7 @@ const App: React.FC = () => {
         ALUGUER: 0, EMERGENCIA: 0, UTILIDADES: 0, GERAL: 0, INFANTIL: 0
       };
 
-      // Verificar quanto falta para completar a meta de €1350 na reserva de renda
+      // Verificar quanto falta para completar a meta na reserva de renda
       const rentaMissing = Math.max(0, config.rentTarget - saldoRenda);
       
       if (rentaMissing > 0) {
@@ -375,15 +417,16 @@ const App: React.FC = () => {
           newAllocations.GERAL = remaining * (config.fundPercentages.GERAL / totalOtherPercentages);
         }
       } else {
+        // Meta atingida - distribui tudo entre os outros fundos
         const totalOtherPercentages = config.fundPercentages.EMERGENCIA + config.fundPercentages.UTILIDADES + config.fundPercentages.GERAL;
         newAllocations.EMERGENCIA = val * (config.fundPercentages.EMERGENCIA / totalOtherPercentages);
         newAllocations.UTILIDADES = val * (config.fundPercentages.UTILIDADES / totalOtherPercentages);
         newAllocations.GERAL = val * (config.fundPercentages.GERAL / totalOtherPercentages);
       }
 
-      // Atualizar no Firebase
+      // Atualizar no Firebase usando UPDATE (não criar duplicado)
       try {
-        await addTransactionToFirestore({ ...tx, fundAllocations: newAllocations });
+        await updateTransactionInFirestore(tx.id, { fundAllocations: newAllocations });
         recalculadas++;
       } catch (error) {
         console.error('Erro ao recalcular transação:', tx.id, error);
@@ -676,15 +719,26 @@ const App: React.FC = () => {
               <span className="text-lg">{Object.values(config.fundPercentages).reduce((a: number, b: number) => a + b, 0)}%</span>
             </div>
             
-            <button 
-              onClick={recalcularAlocacoes} 
-              className="mt-4 w-full py-3 bg-blue-600 text-white font-bold hover:bg-blue-700 rounded-xl transition-all flex items-center justify-center gap-2"
-            >
-              <RefreshCw size={16} /> Recalcular Todas as Alocações
-            </button>
-            <p className="text-xs text-slate-500 text-center mt-2">
-              Use este botão para aplicar as novas percentagens a todas as transações existentes
-            </p>
+            <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+              <p className="text-xs font-bold text-amber-800 mb-3">⚠️ Para corrigir valores após mudar percentagens:</p>
+              <div className="space-y-2">
+                <button 
+                  onClick={limparReposicoesAutomaticas} 
+                  className="w-full py-2 bg-amber-500 text-white font-bold hover:bg-amber-600 rounded-lg transition-all flex items-center justify-center gap-2 text-sm"
+                >
+                  <Trash2 size={14} /> 1º Limpar Reposições Automáticas
+                </button>
+                <button 
+                  onClick={recalcularAlocacoes} 
+                  className="w-full py-2 bg-blue-600 text-white font-bold hover:bg-blue-700 rounded-lg transition-all flex items-center justify-center gap-2 text-sm"
+                >
+                  <RefreshCw size={16} /> 2º Recalcular Todas as Alocações
+                </button>
+              </div>
+              <p className="text-[10px] text-amber-700 text-center mt-2">
+                Execute na ordem: primeiro limpe as reposições, depois recalcule
+              </p>
+            </div>
           </div>
           
           <div className="pt-8 border-t border-slate-100 flex flex-col gap-3">

@@ -80,6 +80,17 @@ export const addTransaction = async (transaction: Transaction): Promise<void> =>
   }
 };
 
+export const updateTransaction = async (transactionId: string, data: Partial<Transaction>): Promise<void> => {
+  try {
+    const docRef = doc(db, TRANSACTIONS_COLLECTION, transactionId);
+    await updateDoc(docRef, data);
+    console.log('Transação atualizada com sucesso! ID:', transactionId);
+  } catch (error: any) {
+    console.error('Erro ao atualizar transação:', error);
+    throw error;
+  }
+};
+
 export const deleteTransaction = async (transactionId: string): Promise<void> => {
   try {
     await deleteDoc(doc(db, TRANSACTIONS_COLLECTION, transactionId));
