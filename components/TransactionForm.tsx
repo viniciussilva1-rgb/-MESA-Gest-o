@@ -130,27 +130,8 @@ const TransactionForm: React.FC<Props> = ({ onAdd, config, currentRentBalance })
       await onAdd(newTransaction);
       console.log('TransactionForm: onAdd executado com sucesso');
       
-      if (type === 'EXPENSE' && category === 'RENDA') {
-        const repoTransaction: Transaction = {
-          id: crypto.randomUUID(),
-          date: new Date().toISOString(),
-          description: `Reposição automática - Reserva Renda`,
-          amount: val,
-          type: 'EXPENSE',
-          category: 'OUTROS',
-          fundAllocations: {
-            ALUGUER: val,
-            EMERGENCIA: 0,
-            UTILIDADES: 0,
-            GERAL: -val,
-            INFANTIL: 0,
-          },
-          invoiceRef: undefined,
-          hasAttachment: false
-        };
-        console.log('TransactionForm: Criando reposição automática');
-        await onAdd(repoTransaction);
-      }
+      // Não criar mais reposição automática - o sistema já recalcula automaticamente
+      // quando entra novo dinheiro, ele preenche a reserva de renda primeiro
       
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 2000);

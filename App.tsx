@@ -152,13 +152,15 @@ const App: React.FC = () => {
     let totalIncome = 0; let totalExpenses = 0;
     let infantilIncome = 0; let infantilExpenses = 0;
     
-    transactions.forEach((tx) => {
+    // Primeiro, filtrar as transações reais (sem transferências internas)
+    const transacoesReais = transactions.filter(tx => 
+      !tx.description.toLowerCase().includes('transferência') &&
+      !tx.description.toLowerCase().includes('reposição automática')
+    );
+    
+    transacoesReais.forEach((tx) => {
       // Separar valores do ministério infantil
       const isInfantil = tx.category === 'INFANTIL';
-      
-      // Verificar se é uma transação interna (transferência entre fundos)
-      const isTransferenciaInterna = tx.description.toLowerCase().includes('transferência') || 
-                                      tx.description.toLowerCase().includes('reposição automática');
       
       if (tx.type === 'INCOME') {
         if (isInfantil) {
@@ -171,8 +173,7 @@ const App: React.FC = () => {
         if (isInfantil) {
           infantilExpenses += tx.amount;
           fundBalances.INFANTIL -= tx.amount;
-        } else if (!isTransferenciaInterna) {
-          // Só conta como despesa real se NÃO for transferência interna
+        } else {
           totalExpenses += tx.amount;
         }
       }
