@@ -362,8 +362,8 @@ const App: React.FC = () => {
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(val);
 
-  // Função para gerar PDF e compartilhar no WhatsApp
-  const compartilharWhatsApp = async () => {
+  // Função para baixar PDF do relatório
+  const baixarPDF = async () => {
     if (!reportRef.current) return;
     
     setIsGeneratingPDF(true);
@@ -385,39 +385,13 @@ const App: React.FC = () => {
       
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
       
-      // Gerar blob do PDF
-      const pdfBlob = pdf.output('blob');
-      const pdfFile = new File([pdfBlob], `Relatorio_${config.churchName}_${new Date().toLocaleDateString('pt-PT').replace(/\//g, '-')}.pdf`, { type: 'application/pdf' });
+      // Baixar o PDF
+      const nomeArquivo = `Relatorio_${config.churchName.replace(/\s+/g, '_')}_${new Date().toLocaleDateString('pt-PT').replace(/\//g, '-')}.pdf`;
+      pdf.save(nomeArquivo);
       
-      // Verificar se a Web Share API suporta arquivos
-      if (navigator.share && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
-        await navigator.share({
-          title: `Relatório Financeiro - ${config.churchName}`,
-          text: `Relatório Financeiro do mês - ${config.churchName}\n\n📊 Entradas: ${formatCurrency(stats.totalIncome)}\n💸 Despesas: ${formatCurrency(stats.totalExpenses)}\n💰 Saldo: ${formatCurrency(stats.fundBalances.UTILIDADES + stats.fundBalances.GERAL)}`,
-          files: [pdfFile]
-        });
-      } else {
-        // Fallback: baixar PDF e abrir WhatsApp com texto
-        pdf.save(`Relatorio_${config.churchName}_${new Date().toLocaleDateString('pt-PT').replace(/\//g, '-')}.pdf`);
-        
-        const texto = encodeURIComponent(
-          `📋 *Relatório Financeiro - ${config.churchName}*\n\n` +
-          `📅 Data: ${new Date().toLocaleDateString('pt-PT')}\n\n` +
-          `📊 *Resumo:*\n` +
-          `✅ Entradas: ${formatCurrency(stats.totalIncome)}\n` +
-          `❌ Despesas: ${formatCurrency(stats.totalExpenses)}\n` +
-          `💰 Saldo Disponível: ${formatCurrency(stats.fundBalances.UTILIDADES + stats.fundBalances.GERAL)}\n\n` +
-          `🏠 Reserva Renda: ${formatCurrency(stats.fundBalances.ALUGUER)} / ${formatCurrency(config.rentTarget)}\n` +
-          `🚨 Emergência: ${formatCurrency(stats.fundBalances.EMERGENCIA)}\n` +
-          `💡 Água/Luz: ${formatCurrency(stats.fundBalances.UTILIDADES)}\n\n` +
-          `_PDF baixado no dispositivo_`
-        );
-        
-        window.open(`https://wa.me/?text=${texto}`, '_blank');
-      }
     } catch (error) {
       console.error('Erro ao gerar PDF:', error);
-      alert('Erro ao gerar o PDF. Tente usar o botão "Emitir PDF do Mês".');
+      alert('Erro ao gerar o PDF. Tente novamente.');
     } finally {
       setIsGeneratingPDF(false);
     }
@@ -814,14 +788,14 @@ const App: React.FC = () => {
           </div>
           <div className="text-right flex flex-col items-end gap-2 print:hidden">
             <button onClick={() => window.print()} className="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-xl hover:bg-black transition-all shadow-lg font-bold">
-              <Printer size={20} /> Emitir PDF do Mês
+              <Printer size={20} /> Imprimir
             </button>
             <button 
-              onClick={compartilharWhatsApp} 
+              onClick={baixarPDF} 
               disabled={isGeneratingPDF}
-              className="flex items-center gap-2 px-6 py-3 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-all shadow-lg font-bold disabled:opacity-50"
+              className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all shadow-lg font-bold disabled:opacity-50"
             >
-              <Share2 size={20} /> {isGeneratingPDF ? 'Gerando...' : 'Enviar WhatsApp'}
+              <Download size={20} /> {isGeneratingPDF ? 'Gerando...' : 'Baixar PDF'}
             </button>
           </div>
         </div>
