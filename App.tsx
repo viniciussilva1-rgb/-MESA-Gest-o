@@ -244,6 +244,50 @@ const App: React.FC = () => {
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(val);
 
+  // Função para completar a reserva de renda usando o saldo disponível
+  const completarReservaRenda = async () => {
+    const faltaParaMeta = config.rentTarget - stats.fundBalances.ALUGUER;
+    const saldoDisponivel = stats.fundBalances.GERAL;
+    
+    if (faltaParaMeta <= 0) {
+      alert('A meta de reserva de renda já foi atingida!');
+      return;
+    }
+    
+    if (saldoDisponivel <= 0) {
+      alert('Não há saldo disponível no fundo Geral para transferir.');
+      return;
+    }
+    
+    const valorTransferir = Math.min(faltaParaMeta, saldoDisponivel);
+    
+    if (!confirm(`Deseja transferir ${formatCurrency(valorTransferir)} do Saldo Disponível para a Reserva de Renda?`)) {
+      return;
+    }
+    
+    const transferencia: Transaction = {
+      id: crypto.randomUUID(),
+      date: new Date().toISOString(),
+      description: 'Transferência para completar Reserva de Renda',
+      amount: valorTransferir,
+      type: 'EXPENSE',
+      category: 'OUTROS',
+      fundAllocations: {
+        ALUGUER: valorTransferir,
+        EMERGENCIA: 0,
+        UTILIDADES: 0,
+        GERAL: -valorTransferir,
+      }
+    };
+    
+    try {
+      await handleAddTransaction(transferencia);
+      alert(`Transferência de ${formatCurrency(valorTransferir)} realizada com sucesso!`);
+    } catch (error) {
+      console.error('Erro na transferência:', error);
+    }
+  };
+
   const resetData = () => {
     if (confirm("Deseja realmente apagar todos os lançamentos locais? Esta ação não afetará sua planilha do Google se você já tiver sincronizado.")) {
       setTransactions([]);
@@ -264,7 +308,28 @@ const App: React.FC = () => {
         <SummaryCard icon={<Wallet size={24} />} title="Saldo Disponível" value={formatCurrency(stats.fundBalances.UTILIDADES + stats.fundBalances.GERAL)} color="blue" />
         <SummaryCard icon={<TrendingUp size={24} />} title="Entradas" value={formatCurrency(stats.totalIncome)} color="emerald" />
         <SummaryCard icon={<Landmark size={24} />} title="Emergência" value={formatCurrency(stats.fundBalances.EMERGENCIA)} color="red" />
-        <SummaryCard icon={<FileText size={24} />} title="Reserva Renda" value={formatCurrency(stats.fundBalances.ALUGUER)} color="amber" />
+        
+        {/* Card especial da Reserva Renda com botão para completar */}
+        <div className="bg-white p-5 rounded-3xl shadow-sm border border-amber-100 hover:shadow-md transition-all">
+          <div className="flex items-center justify-between mb-4">
+            <div className="p-3 rounded-2xl bg-amber-50 text-amber-600"><FileText size={24} /></div>
+            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Reserva Renda</span>
+          </div>
+          <h3 className="text-2xl font-black text-slate-900 tracking-tighter">{formatCurrency(stats.fundBalances.ALUGUER)}</h3>
+          <p className="text-xs text-slate-500 mt-1">Meta: {formatCurrency(config.rentTarget)}</p>
+          
+          {stats.fundBalances.ALUGUER < config.rentTarget && stats.fundBalances.GERAL > 0 && (
+            <button
+              onClick={completarReservaRenda}
+              className="mt-3 w-full py-2 px-3 bg-amber-100 hover:bg-amber-200 text-amber-800 text-xs font-bold rounded-xl transition-all"
+            >
+              Completar Reserva ({formatCurrency(Math.min(config.rentTarget - stats.fundBalances.ALUGUER, stats.fundBalances.GERAL))})
+            </button>
+          )}
+          {stats.fundBalances.ALUGUER >= config.rentTarget && (
+            <p className="mt-3 text-xs text-emerald-600 font-bold">Meta atingida</p>
+          )}
+        </div>
       </section>
 
       <section className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl p-8 text-white shadow-2xl relative overflow-hidden">
