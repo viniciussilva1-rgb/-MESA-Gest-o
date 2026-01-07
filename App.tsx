@@ -534,10 +534,10 @@ const App: React.FC = () => {
       <aside className={`fixed inset-y-0 left-0 w-64 bg-slate-900 text-slate-300 z-50 transform transition-transform duration-300 lg:relative lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} print:hidden`}>
         <div className="p-6">
           <div className="flex items-center gap-3 mb-10 bg-gradient-to-br from-blue-500/10 to-transparent p-3 rounded-2xl border border-white/5 overflow-hidden">
-            <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center shrink-0 overflow-hidden">
-              <img src="logo.png" alt="Logo" className="w-full h-full object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement!.innerHTML = '<div class="text-white text-[10px] font-black">LOGO</div>' }} />
+            <div className="w-12 h-12 bg-black rounded-xl flex items-center justify-center shrink-0 overflow-hidden p-2 border border-white/10">
+              <img src="/logo-branco.png" alt="Logo" className="w-full h-full object-contain" />
             </div>
-            <h1 className="text-xl font-black text-white leading-tight tracking-tighter">&nbsp;&nbsp;À MESA</h1>
+            <h1 className="text-xl font-black text-white leading-tight tracking-tighter">À MESA</h1>
           </div>
           <nav className="space-y-1">
             <NavBtn active={activeTab === 'DASHBOARD'} onClick={() => setActiveTab('DASHBOARD')} icon={<LayoutDashboard size={20} />} label="Início" />
