@@ -6,66 +6,78 @@ import TransactionForm from './components/TransactionForm';
 import DashboardCharts from './components/DashboardCharts';
 import { getFinancialInsights } from './services/geminiService';
 import { 
+  subscribeToTransactions, 
+  subscribeToConfig, 
+  addTransaction as addTransactionToFirestore, 
+  saveConfig,
+  migrateFromLocalStorage 
+} from './services/firestoreService';
+import { 
   Wallet, TrendingUp, TrendingDown, History, Sparkles, 
-  Menu, Bell, LayoutDashboard, Landmark, Settings, FileText, Printer, ChevronRight, Search, Trash2, Cloud, CloudUpload, ExternalLink, CheckCircle2, AlertCircle
+  Menu, Bell, LayoutDashboard, Landmark, Settings, FileText, Printer, ChevronRight, Search, Trash2, Cloud, CloudUpload, ExternalLink, CheckCircle2, AlertCircle, Database
 } from 'lucide-react';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'TRANSACTIONS' | 'REPORTS' | 'SETTINGS'>('DASHBOARD');
   const [syncStatus, setSyncStatus] = useState<'IDLE' | 'SYNCING' | 'SUCCESS' | 'ERROR'>('IDLE');
+  const [isLoadingData, setIsLoadingData] = useState(true);
+  const [migrationStatus, setMigrationStatus] = useState<string>('');
   
-  const [transactions, setTransactions] = useState<Transaction[]>(() => {
-    try {
-      const saved = localStorage.getItem('gestao_a_mesa_data');
-      if (!saved) return [];
-      const parsed = JSON.parse(saved);
-      if (parsed.length > 0 && !parsed[0].fundAllocations.ALUGUER && !parsed[0].fundAllocations.GERAL) {
-        return [];
-      }
-      return parsed;
-    } catch (e) { return []; }
-  });
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
 
-  const [config, setConfig] = useState<SystemConfig>(() => {
-    try {
-      const saved = localStorage.getItem('gestao_a_mesa_config');
-      if (!saved) return {
-        churchName: 'Igreja  À MESA',
-        fundPercentages: { ALUGUER: 40, EMERGENCIA: 10, UTILIDADES: 20, GERAL: 30 },
-        rentTarget: 1350,
-        rentAmount: 450,
-        sheetsUrl: ''
-      };
-      const parsed = JSON.parse(saved);
-      return {
-        churchName: parsed.churchName || 'Igreja  À MESA',
-        fundPercentages: parsed.fundPercentages || { ALUGUER: 40, EMERGENCIA: 10, UTILIDADES: 20, GERAL: 30 },
-        rentTarget: parsed.rentTarget || 1350,
-        rentAmount: parsed.rentAmount || 450,
-        sheetsUrl: parsed.sheetsUrl || ''
-      };
-    } catch (e) {
-      return {
-        churchName: 'Igreja  À MESA',
-        fundPercentages: { ALUGUER: 40, EMERGENCIA: 10, UTILIDADES: 20, GERAL: 30 },
-        rentTarget: 1350,
-        rentAmount: 450,
-        sheetsUrl: ''
-      };
-    }
-  });
+  const defaultConfig: SystemConfig = {
+    churchName: 'Igreja  À MESA',
+    fundPercentages: { ALUGUER: 40, EMERGENCIA: 10, UTILIDADES: 20, GERAL: 30 },
+    rentTarget: 1350,
+    rentAmount: 450,
+    sheetsUrl: ''
+  };
+
+  const [config, setConfig] = useState<SystemConfig>(defaultConfig);
   
   const [aiInsight, setAiInsight] = useState<string>('');
   const [isLoadingInsight, setIsLoadingInsight] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
+  // Migrar dados do localStorage para Firebase (apenas uma vez)
   useEffect(() => {
-    localStorage.setItem('gestao_a_mesa_data', JSON.stringify(transactions));
-  }, [transactions]);
+    const checkAndMigrate = async () => {
+      const hasLocalData = localStorage.getItem('gestao_a_mesa_data') || localStorage.getItem('gestao_a_mesa_config');
+      if (hasLocalData) {
+        try {
+          setMigrationStatus('Migrando dados para a nuvem...');
+          const result = await migrateFromLocalStorage();
+          if (result.transactions > 0 || result.config) {
+            setMigrationStatus(`✅ Migração concluída! ${result.transactions} transações migradas.`);
+            setTimeout(() => setMigrationStatus(''), 5000);
+          }
+        } catch (error) {
+          console.error('Erro na migração:', error);
+          setMigrationStatus('❌ Erro na migração. Dados locais mantidos.');
+        }
+      }
+    };
+    checkAndMigrate();
+  }, []);
 
+  // Escutar transações do Firebase em tempo real
   useEffect(() => {
-    localStorage.setItem('gestao_a_mesa_config', JSON.stringify(config));
-  }, [config]);
+    const unsubscribe = subscribeToTransactions((firebaseTransactions) => {
+      setTransactions(firebaseTransactions);
+      setIsLoadingData(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Escutar configurações do Firebase em tempo real
+  useEffect(() => {
+    const unsubscribe = subscribeToConfig((firebaseConfig) => {
+      if (firebaseConfig) {
+        setConfig(firebaseConfig);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   const stats = useMemo((): FinancialStats => {
     const fundBalances: Record<FundType, number> = { ALUGUER: 0, EMERGENCIA: 0, UTILIDADES: 0, GERAL: 0 };
@@ -132,10 +144,25 @@ const App: React.FC = () => {
     }
   };
 
-  const handleAddTransaction = (tx: Transaction) => {
-    setTransactions([tx, ...transactions]);
-    if (config.sheetsUrl) {
-       setTimeout(syncToSheets, 1000);
+  const handleAddTransaction = async (tx: Transaction) => {
+    try {
+      await addTransactionToFirestore(tx);
+      if (config.sheetsUrl) {
+        setTimeout(syncToSheets, 1000);
+      }
+    } catch (error) {
+      console.error('Erro ao adicionar transação:', error);
+      alert('Erro ao salvar transação. Tente novamente.');
+    }
+  };
+
+  const handleSaveConfig = async (newConfig: SystemConfig) => {
+    try {
+      await saveConfig(newConfig);
+      setConfig(newConfig);
+    } catch (error) {
+      console.error('Erro ao salvar configurações:', error);
+      alert('Erro ao salvar configurações. Tente novamente.');
     }
   };
 
@@ -423,7 +450,9 @@ const App: React.FC = () => {
           </div>
           
           <div className="pt-8 border-t border-slate-100 flex flex-col gap-3">
-             <button onClick={() => alert('Configurações salvas no navegador!')} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-black transition-all shadow-lg active:scale-95">Salvar Definições</button>
+             <button onClick={() => handleSaveConfig(config)} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-black transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2">
+               <Database size={18} /> Salvar na Nuvem (Firebase)
+             </button>
              <button onClick={resetData} className="w-full py-3 text-red-500 font-bold hover:bg-red-50 rounded-xl transition-all flex items-center justify-center gap-2 border border-transparent hover:border-red-100">
                <Trash2 size={16} /> Limpar Todos os Lançamentos Locais
              </button>
@@ -470,6 +499,9 @@ const App: React.FC = () => {
             <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">Tesouraria / <span className="text-slate-900">{activeTab}</span></div>
           </div>
           <div className="flex items-center gap-4">
+             <div className="text-[10px] font-black text-emerald-600 uppercase flex items-center gap-1 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-100">
+               <Database size={14} /> Firebase Conectado
+             </div>
              {syncStatus === 'SYNCING' && <div className="text-[10px] font-black text-blue-600 animate-pulse uppercase">Gravando na Nuvem...</div>}
              {syncStatus === 'SUCCESS' && <div className="text-[10px] font-black text-emerald-600 uppercase flex items-center gap-1"><CheckCircle2 size={14} /> Salvo no Sheets</div>}
              {syncStatus === 'ERROR' && <div className="text-[10px] font-black text-red-600 uppercase flex items-center gap-1"><AlertCircle size={14} /> Erro de Conexão</div>}
@@ -477,12 +509,27 @@ const App: React.FC = () => {
           </div>
         </header>
 
-        <div className="p-6 md:p-10 max-w-7xl mx-auto min-h-[calc(100vh-80px)]">
-          {activeTab === 'DASHBOARD' && renderDashboard()}
-          {activeTab === 'TRANSACTIONS' && renderTransactions()}
-          {activeTab === 'REPORTS' && renderReports()}
-          {activeTab === 'SETTINGS' && renderSettings()}
-        </div>
+        {migrationStatus && (
+          <div className="mx-6 mt-4 p-4 bg-blue-50 border border-blue-200 rounded-xl text-sm font-bold text-blue-700 flex items-center gap-2">
+            <Database size={18} /> {migrationStatus}
+          </div>
+        )}
+
+        {isLoadingData ? (
+          <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
+            <div className="text-center">
+              <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+              <p className="text-slate-500 font-bold">Carregando dados do Firebase...</p>
+            </div>
+          </div>
+        ) : (
+          <div className="p-6 md:p-10 max-w-7xl mx-auto min-h-[calc(100vh-80px)]">
+            {activeTab === 'DASHBOARD' && renderDashboard()}
+            {activeTab === 'TRANSACTIONS' && renderTransactions()}
+            {activeTab === 'REPORTS' && renderReports()}
+            {activeTab === 'SETTINGS' && renderSettings()}
+          </div>
+        )}
       </main>
     </div>
   );
