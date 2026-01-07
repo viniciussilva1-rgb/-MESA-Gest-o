@@ -220,13 +220,36 @@ const App: React.FC = () => {
           infantilExpenses += tx.amount;
           saldoInfantil -= tx.amount;
         } else if (tx.category === 'RENDA') {
-          // Pagamento de renda - sai da reserva de renda
+          // Pagamento de renda - sai da reserva de renda, se faltar busca no Saldo Disponível
           totalExpenses += tx.amount;
-          saldoRenda -= tx.amount;
+          if (saldoRenda >= tx.amount) {
+            saldoRenda -= tx.amount;
+          } else {
+            // Usa o que tem e busca o resto no Saldo Disponível
+            const falta = tx.amount - saldoRenda;
+            saldoRenda = 0;
+            saldoGeral -= falta;
+          }
         } else if (tx.category === 'CONTA') {
-          // Pagamento de contas (água, luz, tv) - sai de Utilidades
+          // Pagamento de contas (água, luz, tv) - sai de Utilidades, se faltar busca no Saldo Disponível
           totalExpenses += tx.amount;
-          saldoUtilidades -= tx.amount;
+          if (saldoUtilidades >= tx.amount) {
+            saldoUtilidades -= tx.amount;
+          } else {
+            const falta = tx.amount - saldoUtilidades;
+            saldoUtilidades = 0;
+            saldoGeral -= falta;
+          }
+        } else if (tx.category === 'MANUTENCAO') {
+          // Emergência/Manutenção - sai do fundo de emergência, se faltar busca no Saldo Disponível
+          totalExpenses += tx.amount;
+          if (saldoEmergencia >= tx.amount) {
+            saldoEmergencia -= tx.amount;
+          } else {
+            const falta = tx.amount - saldoEmergencia;
+            saldoEmergencia = 0;
+            saldoGeral -= falta;
+          }
         } else {
           // Outras despesas - sai do Saldo Disponível
           totalExpenses += tx.amount;
