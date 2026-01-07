@@ -153,19 +153,24 @@ const App: React.FC = () => {
       if (tx.type === 'INCOME') {
         if (isInfantil) {
           infantilIncome += tx.amount;
+          // Para entradas do infantil, adicionar ao saldo do fundo infantil
+          fundBalances.INFANTIL += tx.amount;
         } else {
           totalIncome += tx.amount;
         }
       } else {
         if (isInfantil) {
           infantilExpenses += tx.amount;
+          // Para saídas do infantil, subtrair do saldo do fundo infantil
+          fundBalances.INFANTIL -= tx.amount;
         } else {
           totalExpenses += tx.amount;
         }
       }
       
+      // Processar fundAllocations para os outros fundos (exceto infantil que já foi tratado acima)
       Object.entries(tx.fundAllocations).forEach(([fund, val]) => {
-        if (fund in fundBalances) {
+        if (fund in fundBalances && fund !== 'INFANTIL') {
           fundBalances[fund as FundType] += (val as number) || 0;
         }
       });
