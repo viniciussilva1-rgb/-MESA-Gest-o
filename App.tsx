@@ -194,14 +194,26 @@ const App: React.FC = () => {
   };
 
   const handleAddTransaction = async (tx: Transaction) => {
+    console.log('Tentando salvar transação:', tx);
+    console.log('Usuário autenticado:', user?.email);
+    
+    if (!user) {
+      alert('Você precisa estar logado para salvar transações.');
+      return;
+    }
+    
     try {
       await addTransactionToFirestore(tx);
+      console.log('Transação salva com sucesso!');
     } catch (error: any) {
-      console.error('Erro ao adicionar transação:', error);
+      console.error('Erro completo:', error);
+      console.error('Código do erro:', error?.code);
+      console.error('Mensagem:', error?.message);
+      
       if (error?.code === 'permission-denied') {
-        alert('Erro de permissão no Firebase. Configure as regras do Firestore para permitir escrita.');
+        alert('Erro de permissão. Verifique se você está logado corretamente.');
       } else {
-        alert('Erro ao salvar transação: ' + (error?.message || 'Tente novamente.'));
+        alert('Erro ao salvar: ' + (error?.code || error?.message || 'Erro desconhecido'));
       }
       throw error;
     }
