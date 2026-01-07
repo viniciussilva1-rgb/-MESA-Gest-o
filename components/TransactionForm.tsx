@@ -66,49 +66,26 @@ const TransactionForm: React.FC<Props> = ({ onAdd, config, currentRentBalance })
 
     setIsSubmitting(true);
 
+    // SIMPLIFICADO: fundAllocations não é mais usado para cálculos
+    // O App.tsx calcula tudo automaticamente baseado nas transações
     let allocations: Record<FundType, number> = {
       ALUGUER: 0, EMERGENCIA: 0, UTILIDADES: 0, GERAL: 0, INFANTIL: 0
     };
 
+    // Apenas marca o valor para referência (não usado nos cálculos)
     if (type === 'INCOME') {
-      // Se for categoria INFANTIL, vai 100% para o fundo infantil (separado da igreja)
       if (category === 'INFANTIL') {
         allocations.INFANTIL = val;
       } else {
-        // Verificar quanto falta para completar a meta de €1350 na reserva de renda
-        const rentaMissing = Math.max(0, config.rentTarget - currentRentBalance);
-        
-        if (rentaMissing > 0) {
-          // Primeiro, completar a reserva de renda até €1350
-          const rentaAllocation = Math.min(val, rentaMissing);
-          allocations.ALUGUER = rentaAllocation;
-          
-          // O restante vai para os outros fundos proporcionalmente
-          const remaining = val - rentaAllocation;
-          if (remaining > 0) {
-            // Distribui o restante entre Emergência, Água/Luz e Geral (sem a Renda)
-            const totalOtherPercentages = config.fundPercentages.EMERGENCIA + config.fundPercentages.UTILIDADES + config.fundPercentages.GERAL;
-            allocations.EMERGENCIA = remaining * (config.fundPercentages.EMERGENCIA / totalOtherPercentages);
-            allocations.UTILIDADES = remaining * (config.fundPercentages.UTILIDADES / totalOtherPercentages);
-            allocations.GERAL = remaining * (config.fundPercentages.GERAL / totalOtherPercentages);
-          }
-        } else {
-          // Meta atingida - distribui tudo entre os outros fundos
-          const totalOtherPercentages = config.fundPercentages.EMERGENCIA + config.fundPercentages.UTILIDADES + config.fundPercentages.GERAL;
-          allocations.ALUGUER = 0;
-          allocations.EMERGENCIA = val * (config.fundPercentages.EMERGENCIA / totalOtherPercentages);
-          allocations.UTILIDADES = val * (config.fundPercentages.UTILIDADES / totalOtherPercentages);
-          allocations.GERAL = val * (config.fundPercentages.GERAL / totalOtherPercentages);
-        }
+        allocations.GERAL = val; // Marcação simples
       }
     } else {
       if (category === 'RENDA') {
         allocations.ALUGUER = -val;
       } else if (category === 'INFANTIL') {
-        // Saída do ministério infantil
         allocations.INFANTIL = -val;
       } else {
-        allocations[targetFund] = -val;
+        allocations.GERAL = -val;
       }
     }
 

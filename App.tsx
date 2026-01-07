@@ -147,44 +147,89 @@ const App: React.FC = () => {
     }
   };
 
+  // CÁLCULO AUTOMÁTICO E SIMPLES - sem depender de fundAllocations salvos
   const stats = useMemo((): FinancialStats => {
-    const fundBalances: Record<FundType, number> = { ALUGUER: 0, EMERGENCIA: 0, UTILIDADES: 0, GERAL: 0, INFANTIL: 0 };
-    let totalIncome = 0; let totalExpenses = 0;
-    let infantilIncome = 0; let infantilExpenses = 0;
+    let totalIncome = 0; 
+    let totalExpenses = 0;
+    let infantilIncome = 0; 
+    let infantilExpenses = 0;
     
-    // Primeiro, filtrar as transações reais (sem transferências internas)
-    const transacoesReais = transactions.filter(tx => 
-      !tx.description.toLowerCase().includes('transferência') &&
-      !tx.description.toLowerCase().includes('reposição automática')
-    );
+    // Saldos dos fundos - calculados automaticamente
+    let saldoRenda = 0;
+    let saldoEmergencia = 0;
+    let saldoGeral = 0; // Saldo Disponível
+    let saldoInfantil = 0;
     
-    transacoesReais.forEach((tx) => {
-      // Separar valores do ministério infantil
+    const META_RENDA = config.rentTarget; // €1350
+    const PERCENT_EMERGENCIA = 0.10; // 10%
+    
+    // Ordenar por data para processar na ordem correta
+    const transacoesOrdenadas = [...transactions]
+      .filter(tx => 
+        !tx.description.toLowerCase().includes('transferência') &&
+        !tx.description.toLowerCase().includes('reposição automática')
+      )
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    
+    transacoesOrdenadas.forEach((tx) => {
       const isInfantil = tx.category === 'INFANTIL';
       
       if (tx.type === 'INCOME') {
+        // === ENTRADAS ===
         if (isInfantil) {
+          // Ministério Infantil - 100% separado
           infantilIncome += tx.amount;
-          fundBalances.INFANTIL += tx.amount;
+          saldoInfantil += tx.amount;
         } else {
+          // Entrada normal da igreja
           totalIncome += tx.amount;
+          let valor = tx.amount;
+          
+          // 1º Preencher reserva de renda até a meta
+          const faltaRenda = Math.max(0, META_RENDA - saldoRenda);
+          if (faltaRenda > 0) {
+            const paraRenda = Math.min(valor, faltaRenda);
+            saldoRenda += paraRenda;
+            valor -= paraRenda;
+          }
+          
+          // 2º 10% para emergência
+          if (valor > 0) {
+            const paraEmergencia = valor * PERCENT_EMERGENCIA;
+            saldoEmergencia += paraEmergencia;
+            valor -= paraEmergencia;
+          }
+          
+          // 3º Resto vai para Saldo Disponível (Geral)
+          if (valor > 0) {
+            saldoGeral += valor;
+          }
         }
       } else {
+        // === SAÍDAS ===
         if (isInfantil) {
           infantilExpenses += tx.amount;
-          fundBalances.INFANTIL -= tx.amount;
-        } else {
+          saldoInfantil -= tx.amount;
+        } else if (tx.category === 'RENDA') {
+          // Pagamento de renda - sai da reserva de renda
           totalExpenses += tx.amount;
+          saldoRenda -= tx.amount;
+        } else {
+          // Outras despesas - sai do Saldo Disponível
+          totalExpenses += tx.amount;
+          saldoGeral -= tx.amount;
         }
       }
-      
-      // Processar fundAllocations para os outros fundos (exceto infantil que já foi tratado acima)
-      Object.entries(tx.fundAllocations).forEach(([fund, val]) => {
-        if (fund in fundBalances && fund !== 'INFANTIL') {
-          fundBalances[fund as FundType] += (val as number) || 0;
-        }
-      });
     });
+    
+    const fundBalances: Record<FundType, number> = { 
+      ALUGUER: saldoRenda, 
+      EMERGENCIA: saldoEmergencia, 
+      UTILIDADES: 0, // Não usado mais
+      GERAL: saldoGeral, // Saldo Disponível
+      INFANTIL: saldoInfantil 
+    };
+    
     return { 
       totalIncome, 
       totalExpenses, 
@@ -193,7 +238,7 @@ const App: React.FC = () => {
       infantilIncome,
       infantilExpenses
     };
-  }, [transactions]);
+  }, [transactions, config.rentTarget]);
 
   const chartHistory = useMemo(() => {
     const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun'];
@@ -830,56 +875,39 @@ const App: React.FC = () => {
           </div>
           
           <div>
-            <h4 className="text-xs font-black text-slate-500 mb-6 uppercase tracking-widest">Divisão de Receitas Automática (%)</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-               {Object.entries(FUND_INFO).map(([key, info]) => (
-                 <div key={key}>
-                   <label className="block text-[10px] font-black text-slate-400 mb-2 uppercase tracking-tighter">{info.label}</label>
-                   <div className="flex items-center gap-2">
-                    <input 
-                      type="number" 
-                      value={config.fundPercentages[key as FundType] || 0}
-                      onChange={(e) => setConfig({
-                        ...config, 
-                        fundPercentages: {...config.fundPercentages, [key]: parseInt(e.target.value)||0}
-                      })}
-                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-bold text-slate-900" 
-                    />
-                    <span className="font-black text-slate-400">%</span>
-                   </div>
-                 </div>
-               ))}
-            </div>
-            <div className={`mt-6 p-4 rounded-xl text-xs flex items-center justify-between font-bold ${Object.values(config.fundPercentages).reduce((a: number, b: number) => a + b, 0) === 100 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-              <span className="flex items-center gap-2"><Sparkles size={16} /> Total da Distribuição:</span>
-              <span className="text-lg">{Object.values(config.fundPercentages).reduce((a: number, b: number) => a + b, 0)}%</span>
-            </div>
+            <h4 className="text-xs font-black text-slate-500 mb-6 uppercase tracking-widest">Regras de Distribuição Automática</h4>
             
-            <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-xl">
-              <p className="text-xs font-bold text-amber-800 mb-3">⚠️ Para corrigir valores após mudar percentagens:</p>
-              <div className="space-y-2">
-                <button 
-                  onClick={removerDuplicados} 
-                  className="w-full py-2 bg-red-500 text-white font-bold hover:bg-red-600 rounded-lg transition-all flex items-center justify-center gap-2 text-sm"
-                >
-                  <Trash2 size={14} /> 🔴 Remover Duplicados
-                </button>
+            <div className="space-y-4">
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                <p className="font-bold text-blue-800 mb-2">💰 Como o dinheiro é distribuído:</p>
+                <ol className="text-sm text-blue-700 space-y-2 list-decimal list-inside">
+                  <li><strong>Reserva de Renda</strong> - Preenche até €{config.rentTarget} (3x renda mensal)</li>
+                  <li><strong>Fundo de Emergência</strong> - 10% de cada entrada</li>
+                  <li><strong>Saldo Disponível</strong> - O restante fica disponível para uso</li>
+                </ol>
+                <p className="text-xs text-blue-600 mt-3">* Ministério Infantil é 100% separado</p>
+              </div>
+              
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                <label className="block text-xs font-black text-slate-500 mb-2 uppercase">Meta da Reserva de Renda (€)</label>
+                <input 
+                  type="number" 
+                  value={config.rentTarget}
+                  onChange={(e) => setConfig({...config, rentTarget: parseInt(e.target.value) || 1350})}
+                  className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-900" 
+                />
+                <p className="text-xs text-slate-500 mt-1">Recomendado: 3x o valor da renda mensal</p>
+              </div>
+              
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                <p className="text-xs font-bold text-amber-800 mb-3">🧹 Limpar dados antigos com problemas:</p>
                 <button 
                   onClick={limparTransferenciasInternas} 
                   className="w-full py-2 bg-amber-500 text-white font-bold hover:bg-amber-600 rounded-lg transition-all flex items-center justify-center gap-2 text-sm"
                 >
-                  <Trash2 size={14} /> 1º Limpar Transferências Internas
-                </button>
-                <button 
-                  onClick={recalcularAlocacoes} 
-                  className="w-full py-2 bg-blue-600 text-white font-bold hover:bg-blue-700 rounded-lg transition-all flex items-center justify-center gap-2 text-sm"
-                >
-                  <RefreshCw size={16} /> 2º Recalcular Todas as Alocações
+                  <Trash2 size={14} /> Remover Transferências Internas Antigas
                 </button>
               </div>
-              <p className="text-[10px] text-amber-700 text-center mt-2">
-                Se houver duplicados, remova-os primeiro!
-              </p>
             </div>
           </div>
           
