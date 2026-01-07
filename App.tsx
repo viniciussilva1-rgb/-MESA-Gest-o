@@ -111,6 +111,7 @@ const App: React.FC = () => {
   }, [user]);
 
   // Escutar configurações do Firebase em tempo real (apenas após login)
+  const [configLoaded, setConfigLoaded] = useState(false);
   useEffect(() => {
     if (!user) return;
     
@@ -118,9 +119,21 @@ const App: React.FC = () => {
       if (firebaseConfig) {
         setConfig(firebaseConfig);
       }
+      setConfigLoaded(true);
     });
     return () => unsubscribe();
   }, [user]);
+
+  // Salvar configurações automaticamente quando mudam (após carregamento inicial)
+  useEffect(() => {
+    if (!user || !configLoaded) return;
+    
+    const timeoutId = setTimeout(() => {
+      saveConfig(config).catch(err => console.error('Erro ao salvar config:', err));
+    }, 1000); // Aguarda 1 segundo para não salvar a cada tecla
+    
+    return () => clearTimeout(timeoutId);
+  }, [config, user, configLoaded]);
 
   const handleLogout = async () => {
     if (confirm('Deseja realmente sair do sistema?')) {
@@ -485,9 +498,10 @@ const App: React.FC = () => {
           </div>
           
           <div className="pt-8 border-t border-slate-100 flex flex-col gap-3">
-             <button onClick={() => handleSaveConfig(config)} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-black transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2">
-               <Database size={18} /> Salvar na Nuvem (Firebase)
-             </button>
+             <div className="flex items-center gap-2 text-emerald-600 text-sm font-medium">
+               <CheckCircle2 size={18} />
+               <span>Configurações salvas automaticamente</span>
+             </div>
              <button onClick={resetData} className="w-full py-3 text-red-500 font-bold hover:bg-red-50 rounded-xl transition-all flex items-center justify-center gap-2 border border-transparent hover:border-red-100">
                <Trash2 size={16} /> Limpar Todos os Lançamentos Locais
              </button>
