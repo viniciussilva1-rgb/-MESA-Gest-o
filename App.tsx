@@ -196,12 +196,14 @@ const App: React.FC = () => {
   const handleAddTransaction = async (tx: Transaction) => {
     try {
       await addTransactionToFirestore(tx);
-      if (config.sheetsUrl) {
-        setTimeout(syncToSheets, 1000);
-      }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao adicionar transação:', error);
-      alert('Erro ao salvar transação. Tente novamente.');
+      if (error?.code === 'permission-denied') {
+        alert('Erro de permissão no Firebase. Configure as regras do Firestore para permitir escrita.');
+      } else {
+        alert('Erro ao salvar transação: ' + (error?.message || 'Tente novamente.'));
+      }
+      throw error;
     }
   };
 
