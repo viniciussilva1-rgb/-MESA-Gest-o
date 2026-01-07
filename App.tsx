@@ -157,11 +157,13 @@ const App: React.FC = () => {
     // Saldos dos fundos - calculados automaticamente
     let saldoRenda = 0;
     let saldoEmergencia = 0;
+    let saldoUtilidades = 0; // Água, Luz, TV
     let saldoGeral = 0; // Saldo Disponível
     let saldoInfantil = 0;
     
     const META_RENDA = config.rentTarget; // €1350
     const PERCENT_EMERGENCIA = 0.10; // 10%
+    const PERCENT_UTILIDADES = 0.10; // 10% para Água/Luz/TV
     
     // Ordenar por data para processar na ordem correta
     const transacoesOrdenadas = [...transactions]
@@ -200,7 +202,14 @@ const App: React.FC = () => {
             valor -= paraEmergencia;
           }
           
-          // 3º Resto vai para Saldo Disponível (Geral)
+          // 3º 10% para Água/Luz/TV
+          if (valor > 0) {
+            const paraUtilidades = valor * PERCENT_UTILIDADES;
+            saldoUtilidades += paraUtilidades;
+            valor -= paraUtilidades;
+          }
+          
+          // 4º Resto vai para Saldo Disponível (Geral)
           if (valor > 0) {
             saldoGeral += valor;
           }
@@ -214,6 +223,10 @@ const App: React.FC = () => {
           // Pagamento de renda - sai da reserva de renda
           totalExpenses += tx.amount;
           saldoRenda -= tx.amount;
+        } else if (tx.category === 'CONTA') {
+          // Pagamento de contas (água, luz, tv) - sai de Utilidades
+          totalExpenses += tx.amount;
+          saldoUtilidades -= tx.amount;
         } else {
           // Outras despesas - sai do Saldo Disponível
           totalExpenses += tx.amount;
@@ -225,7 +238,7 @@ const App: React.FC = () => {
     const fundBalances: Record<FundType, number> = { 
       ALUGUER: saldoRenda, 
       EMERGENCIA: saldoEmergencia, 
-      UTILIDADES: 0, // Não usado mais
+      UTILIDADES: saldoUtilidades, // Água, Luz, TV
       GERAL: saldoGeral, // Saldo Disponível
       INFANTIL: saldoInfantil 
     };
@@ -883,7 +896,8 @@ const App: React.FC = () => {
                 <ol className="text-sm text-blue-700 space-y-2 list-decimal list-inside">
                   <li><strong>Reserva de Renda</strong> - Preenche até €{config.rentTarget} (3x renda mensal)</li>
                   <li><strong>Fundo de Emergência</strong> - 10% de cada entrada</li>
-                  <li><strong>Saldo Disponível</strong> - O restante fica disponível para uso</li>
+                  <li><strong>Água/Luz/TV</strong> - 10% de cada entrada</li>
+                  <li><strong>Saldo Disponível</strong> - O restante (80%) fica disponível</li>
                 </ol>
                 <p className="text-xs text-blue-600 mt-3">* Ministério Infantil é 100% separado</p>
               </div>
