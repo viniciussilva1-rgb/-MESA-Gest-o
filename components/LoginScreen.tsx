@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { loginWithEmail, createInitialUser } from '../services/authService';
-import { Landmark, Mail, Lock, LogIn, AlertCircle, Loader2 } from 'lucide-react';
+import { loginWithEmail } from '../services/authService';
+import { Mail, Lock, LogIn, AlertCircle, Loader2 } from 'lucide-react';
 
 interface LoginScreenProps {
   onLoginSuccess: () => void;
@@ -11,7 +11,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isCreatingUser, setIsCreatingUser] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,21 +24,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
       setError(err.message);
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  // Função para criar o usuário inicial (executar apenas uma vez)
-  const handleCreateInitialUser = async () => {
-    setIsCreatingUser(true);
-    setError('');
-    try {
-      await createInitialUser('amesalourinha@gmail.com', 'Jesusreinaaqui2025');
-      setError('');
-      alert('✅ Usuário criado com sucesso! Agora faça login.');
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setIsCreatingUser(false);
     }
   };
 
@@ -115,17 +99,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
               )}
             </button>
           </form>
-
-          {/* Botão oculto para criar usuário inicial - remover após uso */}
-          <div className="mt-6 pt-6 border-t border-slate-100">
-            <button
-              onClick={handleCreateInitialUser}
-              disabled={isCreatingUser}
-              className="w-full py-3 text-xs text-slate-400 hover:text-blue-600 font-bold transition-all"
-            >
-              {isCreatingUser ? 'Criando usuário...' : '🔐 Criar usuário inicial (usar apenas uma vez)'}
-            </button>
-          </div>
         </div>
 
         <p className="text-center text-slate-500 text-xs mt-8 font-medium">
