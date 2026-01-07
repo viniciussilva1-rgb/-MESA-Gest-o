@@ -143,6 +143,7 @@ const TransactionForm: React.FC<Props> = ({ onAdd, config, currentRentBalance })
             EMERGENCIA: 0,
             UTILIDADES: 0,
             GERAL: -val,
+            INFANTIL: 0,
           },
           invoiceRef: undefined,
           hasAttachment: false
