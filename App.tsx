@@ -328,44 +328,6 @@ const App: React.FC = () => {
     }
   };
 
-  // Função de diagnóstico para ver as alocações de cada transação
-  const diagnosticarAlocacoes = () => {
-    console.log('=== DIAGNÓSTICO DE ALOCAÇÕES ===');
-    
-    let totalALUGUER = 0;
-    let totalEMERGENCIA = 0;
-    let totalUTILIDADES = 0;
-    let totalGERAL = 0;
-    
-    const sortedTx = [...transactions].sort((a, b) => 
-      new Date(a.date).getTime() - new Date(b.date).getTime()
-    );
-    
-    sortedTx.forEach(tx => {
-      const aluguer = tx.fundAllocations?.ALUGUER || 0;
-      const emergencia = tx.fundAllocations?.EMERGENCIA || 0;
-      const utilidades = tx.fundAllocations?.UTILIDADES || 0;
-      const geral = tx.fundAllocations?.GERAL || 0;
-      
-      totalALUGUER += aluguer;
-      totalEMERGENCIA += emergencia;
-      totalUTILIDADES += utilidades;
-      totalGERAL += geral;
-      
-      if (aluguer !== 0) {
-        console.log(`${tx.type} | ${tx.description} | €${tx.amount} | ALUGUER: €${aluguer.toFixed(2)}`);
-      }
-    });
-    
-    console.log('--- TOTAIS ---');
-    console.log(`ALUGUER: €${totalALUGUER.toFixed(2)}`);
-    console.log(`EMERGENCIA: €${totalEMERGENCIA.toFixed(2)}`);
-    console.log(`UTILIDADES: €${totalUTILIDADES.toFixed(2)}`);
-    console.log(`GERAL: €${totalGERAL.toFixed(2)}`);
-    
-    alert(`📊 Diagnóstico no Console (F12)\n\nReserva Renda (ALUGUER): €${totalALUGUER.toFixed(2)}\nEmergência: €${totalEMERGENCIA.toFixed(2)}\nÁgua/Luz: €${totalUTILIDADES.toFixed(2)}\nGeral: €${totalGERAL.toFixed(2)}\n\nMeta Renda: €${config.rentTarget}\n\nSe o ALUGUER está acima da meta, clique em "Recalcular Alocações".`);
-  };
-
   // Função para remover transações duplicadas
   const removerDuplicados = async () => {
     // Agrupar transações por chave única (descrição + valor + categoria + tipo)
@@ -849,12 +811,6 @@ const App: React.FC = () => {
                   className="w-full py-2 bg-blue-600 text-white font-bold hover:bg-blue-700 rounded-lg transition-all flex items-center justify-center gap-2 text-sm"
                 >
                   <RefreshCw size={16} /> 2º Recalcular Todas as Alocações
-                </button>
-                <button 
-                  onClick={diagnosticarAlocacoes} 
-                  className="w-full py-2 bg-slate-600 text-white font-bold hover:bg-slate-700 rounded-lg transition-all flex items-center justify-center gap-2 text-sm"
-                >
-                  📊 Diagnóstico (ver console)
                 </button>
               </div>
               <p className="text-[10px] text-amber-700 text-center mt-2">
