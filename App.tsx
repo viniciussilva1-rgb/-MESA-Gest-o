@@ -328,73 +328,85 @@ const App: React.FC = () => {
     }
   };
 
-  // Função para limpar transações de reposição automática (causam duplicação)
-  const limparReposicoesAutomaticas = async () => {
-    const reposicoes = transactions.filter(tx => 
-      tx.description.toLowerCase().includes('reposição automática')
+  // Função para limpar TODAS transações internas (reposições e transferências)
+  const limparTransferenciasInternas = async () => {
+    const transferencias = transactions.filter(tx => 
+      tx.description.toLowerCase().includes('reposição automática') ||
+      tx.description.toLowerCase().includes('transferência')
     );
     
-    if (reposicoes.length === 0) {
-      alert('Não há transações de reposição automática para remover.');
+    if (transferencias.length === 0) {
+      alert('Não há transações internas (reposições/transferências) para remover.');
       return;
     }
     
-    if (!confirm(`Encontradas ${reposicoes.length} transação(ões) de reposição automática. Deseja removê-las? Isto irá corrigir valores duplicados na Reserva de Renda.`)) {
+    const lista = transferencias.map(t => `- ${t.description}: €${t.amount.toFixed(2)}`).join('\n');
+    if (!confirm(`Encontradas ${transferencias.length} transação(ões) internas:\n\n${lista}\n\nDeseja removê-las?`)) {
       return;
     }
     
     let removidas = 0;
-    for (const tx of reposicoes) {
+    for (const tx of transferencias) {
       try {
         await deleteTransactionFromFirestore(tx.id);
         removidas++;
       } catch (error) {
-        console.error('Erro ao remover reposição:', tx.id, error);
+        console.error('Erro ao remover:', tx.id, error);
       }
     }
     
-    alert(`${removidas} transação(ões) de reposição automática removida(s). Agora recalcule as alocações.`);
+    alert(`${removidas} transação(ões) removida(s) com sucesso!\n\nAgora clique em "Recalcular Alocações".`);
   };
 
   // Função para recalcular alocações de todas as transações com as percentagens atuais
   const recalcularAlocacoes = async () => {
-    // Verificar se há reposições automáticas que precisam ser removidas primeiro
-    const temReposicoes = transactions.some(tx => 
-      tx.description.toLowerCase().includes('reposição automática')
+    // Verificar se há transferências internas que precisam ser removidas primeiro
+    const temTransferencias = transactions.some(tx => 
+      tx.description.toLowerCase().includes('reposição automática') ||
+      tx.description.toLowerCase().includes('transferência')
     );
     
-    if (temReposicoes) {
-      alert('Existem transações de "Reposição automática" que podem causar duplicação. Remova-as primeiro clicando em "Limpar Reposições Automáticas".');
+    if (temTransferencias) {
+      alert('Existem transações internas (reposições/transferências) que causam duplicação.\n\nRemova-as primeiro clicando em "Limpar Transferências Internas".');
       return;
     }
     
-    if (!confirm('Isto irá recalcular todas as alocações de entradas com as percentagens atuais. Continuar?')) {
+    if (!confirm('Isto irá recalcular todas as alocações de entradas.\n\nPercentagens atuais:\n' +
+      `- Emergência: ${config.fundPercentages.EMERGENCIA}%\n` +
+      `- Água/Luz: ${config.fundPercentages.UTILIDADES}%\n` +
+      `- Geral: ${config.fundPercentages.GERAL}%\n\n` +
+      'Continuar?')) {
       return;
     }
 
     let recalculadas = 0;
-    let saldoRenda = 0; // Rastreamos o saldo de renda para simular o preenchimento prioritário
+    let erros = 0;
+    let saldoRenda = 0;
 
     // Ordenar por data para processar na ordem correta
     const sortedTransactions = [...transactions].sort((a, b) => 
       new Date(a.date).getTime() - new Date(b.date).getTime()
     );
 
+    console.log('=== INICIANDO RECÁLCULO ===');
+    console.log('Total de transações:', sortedTransactions.length);
+    console.log('Meta de Renda:', config.rentTarget);
+
     for (const tx of sortedTransactions) {
-      // Ignorar transferências internas
-      const isTransferenciaInterna = tx.description.toLowerCase().includes('transferência');
-      if (isTransferenciaInterna) continue;
-      
       // Para saídas, apenas rastrear o impacto na reserva de renda
       if (tx.type !== 'INCOME') {
         if (tx.category === 'RENDA') {
+          console.log(`Pagamento de renda: -€${tx.amount} (saldo renda: ${saldoRenda} -> ${Math.max(0, saldoRenda - tx.amount)})`);
           saldoRenda = Math.max(0, saldoRenda - tx.amount);
         }
         continue;
       }
       
       // Ignorar entradas do ministério infantil
-      if (tx.category === 'INFANTIL') continue;
+      if (tx.category === 'INFANTIL') {
+        console.log(`Ignorando INFANTIL: ${tx.description}`);
+        continue;
+      }
 
       const val = tx.amount;
       let newAllocations: Record<FundType, number> = {
@@ -416,24 +428,35 @@ const App: React.FC = () => {
           newAllocations.UTILIDADES = remaining * (config.fundPercentages.UTILIDADES / totalOtherPercentages);
           newAllocations.GERAL = remaining * (config.fundPercentages.GERAL / totalOtherPercentages);
         }
+        console.log(`${tx.description}: €${val} -> Renda: €${rentaAllocation.toFixed(2)}, Restante: €${remaining.toFixed(2)}`);
       } else {
         // Meta atingida - distribui tudo entre os outros fundos
         const totalOtherPercentages = config.fundPercentages.EMERGENCIA + config.fundPercentages.UTILIDADES + config.fundPercentages.GERAL;
         newAllocations.EMERGENCIA = val * (config.fundPercentages.EMERGENCIA / totalOtherPercentages);
         newAllocations.UTILIDADES = val * (config.fundPercentages.UTILIDADES / totalOtherPercentages);
         newAllocations.GERAL = val * (config.fundPercentages.GERAL / totalOtherPercentages);
+        console.log(`${tx.description}: €${val} -> Meta atingida, distribuindo entre outros fundos`);
       }
 
-      // Atualizar no Firebase usando UPDATE (não criar duplicado)
+      // Atualizar no Firebase usando UPDATE
       try {
         await updateTransactionInFirestore(tx.id, { fundAllocations: newAllocations });
         recalculadas++;
+        console.log(`✓ Atualizado: ${tx.id}`);
       } catch (error) {
-        console.error('Erro ao recalcular transação:', tx.id, error);
+        console.error('✗ Erro ao atualizar:', tx.id, error);
+        erros++;
       }
     }
 
-    alert(`${recalculadas} transação(ões) recalculada(s) com sucesso!`);
+    console.log('=== RECÁLCULO FINALIZADO ===');
+    console.log(`Recalculadas: ${recalculadas}, Erros: ${erros}`);
+    
+    if (erros > 0) {
+      alert(`Recálculo concluído com ${erros} erro(s).\n${recalculadas} transações atualizadas.\n\nVerifique o console para detalhes.`);
+    } else {
+      alert(`✅ ${recalculadas} transação(ões) recalculada(s) com sucesso!\n\nSaldo final da Reserva de Renda: €${saldoRenda.toFixed(2)}`);
+    }
   };
 
   const renderDashboard = () => (
@@ -723,10 +746,10 @@ const App: React.FC = () => {
               <p className="text-xs font-bold text-amber-800 mb-3">⚠️ Para corrigir valores após mudar percentagens:</p>
               <div className="space-y-2">
                 <button 
-                  onClick={limparReposicoesAutomaticas} 
+                  onClick={limparTransferenciasInternas} 
                   className="w-full py-2 bg-amber-500 text-white font-bold hover:bg-amber-600 rounded-lg transition-all flex items-center justify-center gap-2 text-sm"
                 >
-                  <Trash2 size={14} /> 1º Limpar Reposições Automáticas
+                  <Trash2 size={14} /> 1º Limpar Transferências Internas
                 </button>
                 <button 
                   onClick={recalcularAlocacoes} 
@@ -736,7 +759,7 @@ const App: React.FC = () => {
                 </button>
               </div>
               <p className="text-[10px] text-amber-700 text-center mt-2">
-                Execute na ordem: primeiro limpe as reposições, depois recalcule
+                Execute na ordem: primeiro limpe, depois recalcule
               </p>
             </div>
           </div>
