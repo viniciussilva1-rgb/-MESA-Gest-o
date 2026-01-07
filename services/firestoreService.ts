@@ -19,7 +19,10 @@ const CONFIG_DOC_ID = "system_config";
 
 // ============ TRANSACTIONS ============
 
-export const subscribeToTransactions = (callback: (transactions: Transaction[]) => void) => {
+export const subscribeToTransactions = (
+  callback: (transactions: Transaction[]) => void,
+  onError?: (error: Error) => void
+) => {
   const q = query(collection(db, TRANSACTIONS_COLLECTION), orderBy("date", "desc"));
   
   return onSnapshot(q, (snapshot) => {
@@ -30,6 +33,9 @@ export const subscribeToTransactions = (callback: (transactions: Transaction[]) 
     callback(transactions);
   }, (error) => {
     console.error("Erro ao ouvir transações:", error);
+    // Chama callback com array vazio para não travar o loading
+    callback([]);
+    if (onError) onError(error);
   });
 };
 

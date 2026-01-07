@@ -81,13 +81,32 @@ const App: React.FC = () => {
 
   // Escutar transações do Firebase em tempo real (apenas após login)
   useEffect(() => {
-    if (!user) return;
-    
-    const unsubscribe = subscribeToTransactions((firebaseTransactions) => {
-      setTransactions(firebaseTransactions);
+    if (!user) {
       setIsLoadingData(false);
-    });
-    return () => unsubscribe();
+      return;
+    }
+    
+    // Timeout de segurança - se não carregar em 5 segundos, para de esperar
+    const timeout = setTimeout(() => {
+      setIsLoadingData(false);
+    }, 5000);
+    
+    const unsubscribe = subscribeToTransactions(
+      (firebaseTransactions) => {
+        clearTimeout(timeout);
+        setTransactions(firebaseTransactions);
+        setIsLoadingData(false);
+      },
+      (error) => {
+        clearTimeout(timeout);
+        console.error('Erro Firebase:', error);
+        setIsLoadingData(false);
+      }
+    );
+    return () => {
+      clearTimeout(timeout);
+      unsubscribe();
+    };
   }, [user]);
 
   // Escutar configurações do Firebase em tempo real (apenas após login)
