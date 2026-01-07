@@ -71,18 +71,30 @@ const TransactionForm: React.FC<Props> = ({ onAdd, config, currentRentBalance })
     };
 
     if (type === 'INCOME') {
-      const rentTargetReached = currentRentBalance >= config.rentTarget;
+      // Verificar quanto falta para completar a meta de €1350 na reserva de renda
+      const rentaMissing = Math.max(0, config.rentTarget - currentRentBalance);
       
-      if (rentTargetReached) {
-        allocations.ALUGUER = 0;
-        allocations.EMERGENCIA = val * (config.fundPercentages.EMERGENCIA / 100);
-        allocations.UTILIDADES = val * (config.fundPercentages.UTILIDADES / 100);
-        allocations.GERAL = val * ((config.fundPercentages.GERAL + config.fundPercentages.ALUGUER) / 100);
+      if (rentaMissing > 0) {
+        // Primeiro, completar a reserva de renda até €1350
+        const rentaAllocation = Math.min(val, rentaMissing);
+        allocations.ALUGUER = rentaAllocation;
+        
+        // O restante vai para os outros fundos proporcionalmente
+        const remaining = val - rentaAllocation;
+        if (remaining > 0) {
+          // Distribui o restante entre Emergência, Água/Luz e Geral (sem a Renda)
+          const totalOtherPercentages = config.fundPercentages.EMERGENCIA + config.fundPercentages.UTILIDADES + config.fundPercentages.GERAL;
+          allocations.EMERGENCIA = remaining * (config.fundPercentages.EMERGENCIA / totalOtherPercentages);
+          allocations.UTILIDADES = remaining * (config.fundPercentages.UTILIDADES / totalOtherPercentages);
+          allocations.GERAL = remaining * (config.fundPercentages.GERAL / totalOtherPercentages);
+        }
       } else {
-        allocations.ALUGUER = val * (config.fundPercentages.ALUGUER / 100);
-        allocations.EMERGENCIA = val * (config.fundPercentages.EMERGENCIA / 100);
-        allocations.UTILIDADES = val * (config.fundPercentages.UTILIDADES / 100);
-        allocations.GERAL = val * (config.fundPercentages.GERAL / 100);
+        // Meta atingida - distribui tudo entre os outros fundos
+        const totalOtherPercentages = config.fundPercentages.EMERGENCIA + config.fundPercentages.UTILIDADES + config.fundPercentages.GERAL;
+        allocations.ALUGUER = 0;
+        allocations.EMERGENCIA = val * (config.fundPercentages.EMERGENCIA / totalOtherPercentages);
+        allocations.UTILIDADES = val * (config.fundPercentages.UTILIDADES / totalOtherPercentages);
+        allocations.GERAL = val * (config.fundPercentages.GERAL / totalOtherPercentages);
       }
     } else {
       if (category === 'RENDA') {
@@ -352,26 +364,25 @@ const TransactionForm: React.FC<Props> = ({ onAdd, config, currentRentBalance })
             </div>
           ) : type === 'INCOME' ? (
             <div className="space-y-1.5">
-              <label className="text-sm font-semibold text-slate-700">Distribuição Automática</label>
+              <label className="text-sm font-semibold text-slate-700">Distribuição</label>
               <div className="px-3 py-2.5 bg-slate-50 rounded-xl border border-slate-200">
-                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
-                  <div className="flex items-center justify-between text-slate-600">
-                    <span>Renda</span>
-                    <span className="font-bold text-amber-600">{config.fundPercentages.ALUGUER}%</span>
+                {currentRentBalance < config.rentTarget ? (
+                  <div className="text-xs text-slate-600">
+                    <div className="flex justify-between mb-1">
+                      <span>Falta para meta de Renda:</span>
+                      <span className="font-bold text-amber-600">{formatCurrency(config.rentTarget - currentRentBalance)}</span>
+                    </div>
+                    <p className="text-[10px] text-slate-500">Primeiro completa a reserva, depois distribui o resto.</p>
                   </div>
-                  <div className="flex items-center justify-between text-slate-600">
-                    <span>Emergência</span>
-                    <span className="font-bold text-red-600">{config.fundPercentages.EMERGENCIA}%</span>
+                ) : (
+                  <div className="text-xs text-slate-600">
+                    <div className="flex justify-between mb-1">
+                      <span>Meta de Renda atingida</span>
+                      <span className="font-bold text-emerald-600">{formatCurrency(config.rentTarget)}</span>
+                    </div>
+                    <p className="text-[10px] text-slate-500">Todo valor vai para os outros fundos.</p>
                   </div>
-                  <div className="flex items-center justify-between text-slate-600">
-                    <span>Água/Luz</span>
-                    <span className="font-bold text-blue-600">{config.fundPercentages.UTILIDADES}%</span>
-                  </div>
-                  <div className="flex items-center justify-between text-slate-600">
-                    <span>Geral</span>
-                    <span className="font-bold text-emerald-600">{config.fundPercentages.GERAL}%</span>
-                  </div>
-                </div>
+                )}
               </div>
             </div>
           ) : (
