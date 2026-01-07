@@ -361,7 +361,7 @@ const App: React.FC = () => {
       <div className="bg-white p-10 rounded-3xl shadow-xl border border-slate-100 print:shadow-none print:border-none">
         <div className="flex justify-between items-start mb-12 border-b-2 border-slate-900 pb-8">
           <div className="flex gap-5 items-center">
-            <div className="bg-slate-900 p-4 rounded-2xl text-white shadow-lg"><Landmark size={40} /></div>
+            <img src="/logo-branco.png" alt="Logo" className="w-16 h-16 object-contain bg-slate-900 rounded-2xl p-2" />
             <div>
               <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase">{config.churchName}</h1>
               <p className="text-slate-500 font-bold uppercase text-xs tracking-widest">Relatório Mensal de Gestão Financeira</p>
