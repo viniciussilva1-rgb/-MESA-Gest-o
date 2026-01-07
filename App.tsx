@@ -268,18 +268,14 @@ const App: React.FC = () => {
         </div>
       </section>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-        <div className="xl:col-span-1 space-y-8">
-          <TransactionForm onAdd={handleAddTransaction} config={config} currentRentBalance={stats.fundBalances.ALUGUER} />
-          <FundDistribution stats={stats} />
-        </div>
-        <div className="xl:col-span-2">
-          <DashboardCharts stats={stats} history={chartHistory} />
-          <div className="mt-8">
-            <RecentTransactions transactions={transactions} formatCurrency={formatCurrency} />
-          </div>
-        </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <TransactionForm onAdd={handleAddTransaction} config={config} currentRentBalance={stats.fundBalances.ALUGUER} />
+        <FundDistribution stats={stats} />
       </div>
+
+      <DashboardCharts stats={stats} history={chartHistory} />
+      
+      <RecentTransactions transactions={transactions} formatCurrency={formatCurrency} />
     </div>
   );
 
@@ -616,19 +612,19 @@ const ReportStat = ({ label, value, highlight }: { label: string, value: string,
 );
 
 const FundDistribution = ({ stats }: { stats: FinancialStats }) => (
-  <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-200">
-    <h3 className="text-[11px] font-black text-slate-800 mb-8 border-l-4 border-slate-900 pl-4 uppercase tracking-widest">Distribuição por Fondos</h3>
-    <div className="space-y-6">
+  <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 h-full">
+    <h3 className="text-sm font-bold text-slate-800 mb-6">Distribuição por Fundos</h3>
+    <div className="space-y-5">
       {Object.entries(stats.fundBalances).map(([key, balance]) => {
         const info = FUND_INFO[key as FundType];
         if (!info) return null;
         return (
-          <div key={key}>
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-[10px] font-black text-slate-500 uppercase tracking-tighter">{info.label}</span>
-              <span className="text-sm font-black text-slate-900">{new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(balance as number)}</span>
+          <div key={key} className="p-4 bg-slate-50 rounded-xl">
+            <div className="flex justify-between items-center mb-3">
+              <span className="text-sm font-semibold text-slate-700">{info.label}</span>
+              <span className="text-base font-bold text-slate-900">{new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(balance as number)}</span>
             </div>
-            <div className="w-full bg-slate-100 rounded-full h-2 shadow-inner">
+            <div className="w-full bg-slate-200 rounded-full h-3">
               <div className="h-full rounded-full transition-all duration-1000" style={{ backgroundColor: info.color, width: `${Math.max(0, Math.min(100, (balance as number / (Math.max(stats.totalIncome, 1))) * 100))}%` }} />
             </div>
           </div>
