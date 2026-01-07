@@ -15,9 +15,10 @@ import {
   migrateFromLocalStorage 
 } from './services/firestoreService';
 import { subscribeToAuthState, logout } from './services/authService';
+import { exportToExcel } from './services/exportService';
 import { 
   Wallet, TrendingUp, TrendingDown, History, Sparkles, 
-  Menu, Bell, LayoutDashboard, Landmark, Settings, FileText, Printer, ChevronRight, Search, Trash2, Cloud, CloudUpload, ExternalLink, CheckCircle2, AlertCircle, Database, LogOut
+  Menu, Bell, LayoutDashboard, Landmark, Settings, FileText, Printer, ChevronRight, Search, Trash2, Cloud, CloudUpload, ExternalLink, CheckCircle2, AlertCircle, Database, LogOut, Download, FileSpreadsheet
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -342,6 +343,27 @@ const App: React.FC = () => {
 
   const renderReports = () => (
     <div className="space-y-8 animate-in zoom-in-95 duration-500 print:bg-white print:p-0">
+      {/* Botões de Exportação */}
+      <div className="bg-gradient-to-r from-emerald-500 to-teal-600 p-6 rounded-3xl shadow-xl print:hidden">
+        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+          <div className="text-white">
+            <h3 className="text-xl font-black flex items-center gap-2"><Download size={24} /> Exportar Dados</h3>
+            <p className="text-emerald-100 text-sm font-medium">Baixe uma cópia dos dados para seu computador</p>
+          </div>
+          <div className="flex gap-3">
+            <button 
+              onClick={() => {
+                exportToExcel(transactions, stats, config);
+                alert('✅ Arquivo Excel baixado com sucesso!');
+              }}
+              className="flex items-center gap-2 px-6 py-3 bg-white text-emerald-700 rounded-xl hover:bg-emerald-50 transition-all shadow-lg font-bold"
+            >
+              <FileSpreadsheet size={20} /> Baixar Excel
+            </button>
+          </div>
+        </div>
+      </div>
+
       <div className="bg-white p-10 rounded-3xl shadow-xl border border-slate-100 print:shadow-none print:border-none">
         <div className="flex justify-between items-start mb-12 border-b-2 border-slate-900 pb-8">
           <div className="flex gap-5 items-center">
@@ -421,53 +443,24 @@ const App: React.FC = () => {
             <p className="text-xs text-slate-500 mt-1">Meta automática: 3x €{config.rentAmount} = €{config.rentTarget}</p>
           </div>
 
-          <div className="p-6 bg-blue-50 rounded-2xl border border-blue-100 space-y-4">
-            <h4 className="text-sm font-black text-blue-900 uppercase tracking-widest flex items-center gap-2"><Cloud size={18} /> Integração Google Sheets</h4>
-            <p className="text-xs text-blue-700 font-medium leading-relaxed">
-              Para salvar seus dados em uma planilha do Google automaticamente, siga estes passos:
-              <br/>1. No seu Google Sheets, vá em <strong>Extensões &gt; Apps Script</strong>.
-              <br/>2. Cole o código fornecido abaixo e clique em <strong>Implantar &gt; Nova Implantação</strong>.
-              <br/>3. Selecione "App da Web" e escolha "Qualquer pessoa" em quem pode acessar.
-              <br/>4. Copie o URL gerado e cole no campo abaixo.
-            </p>
-            
-            <div className="space-y-2">
-              <label className="block text-[10px] font-black text-blue-500 uppercase">URL do App da Web (Webhook)</label>
-              <input 
-                type="text" 
-                value={config.sheetsUrl || ''}
-                onChange={(e) => setConfig({...config, sheetsUrl: e.target.value})}
-                placeholder="https://script.google.com/macros/s/.../exec"
-                className="w-full px-4 py-3 bg-white border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-medium" 
-              />
-            </div>
-
-            <details className="group">
-              <summary className="text-[10px] font-black text-blue-600 uppercase cursor-pointer hover:underline list-none flex items-center gap-1">
-                <ChevronRight size={14} className="group-open:rotate-90 transition-transform" /> Ver Código para o Apps Script
-              </summary>
-              <div className="mt-4 p-4 bg-slate-900 rounded-xl text-[10px] font-mono text-emerald-400 overflow-x-auto whitespace-pre">
-{`function doPost(e) {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-  var data = JSON.parse(e.postData.contents);
-  
-  // Limpa a planilha antes de re-preencher (Opcional)
-  // sheet.clear();
-  
-  // Adiciona cabeçalhos se estiver vazio
-  if (sheet.getLastRow() == 0) {
-    sheet.appendRow(['Data', 'Descrição', 'Tipo', 'Categoria', 'Valor', 'Fundo Renda', 'Fundo Emergência', 'Fundo Água/Luz', 'Fundo Geral']);
-  }
-  
-  // Adiciona as transações novas
-  data.transactions.forEach(function(tx) {
-    sheet.appendRow([tx.Data, tx.Descricao, tx.Tipo, tx.Categoria, tx.Valor, tx.Fundo_Renda, tx.Fundo_Emergencia, tx.Fundo_AguaLuz, tx.Fundo_Geral]);
-  });
-  
-  return ContentService.createTextOutput("Backup Concluído com Sucesso!");
-}`}
+          <div className="p-6 bg-emerald-50 rounded-2xl border border-emerald-100 space-y-4">
+            <h4 className="text-sm font-black text-emerald-900 uppercase tracking-widest flex items-center gap-2"><Database size={18} /> Backup dos Dados</h4>
+            <div className="space-y-3 text-sm text-emerald-700 font-medium">
+              <div className="flex items-center gap-3 bg-white p-3 rounded-xl">
+                <CheckCircle2 size={20} className="text-emerald-600" />
+                <div>
+                  <p className="font-bold text-emerald-800">Firebase Firestore (Automático)</p>
+                  <p className="text-xs text-emerald-600">Seus dados são salvos automaticamente na nuvem do Google</p>
+                </div>
               </div>
-            </details>
+              <div className="flex items-center gap-3 bg-white p-3 rounded-xl">
+                <FileSpreadsheet size={20} className="text-emerald-600" />
+                <div>
+                  <p className="font-bold text-emerald-800">Exportar para Excel (Manual)</p>
+                  <p className="text-xs text-emerald-600">Vá em Relatórios → Baixar Excel para ter uma cópia local</p>
+                </div>
+              </div>
+            </div>
           </div>
           
           <div>
