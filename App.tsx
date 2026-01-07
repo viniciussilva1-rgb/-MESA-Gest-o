@@ -72,7 +72,7 @@ const App: React.FC = () => {
           }
         } catch (error) {
           console.error('Erro na migração:', error);
-          setMigrationStatus('❌ Erro na migração. Dados locais mantidos.');
+          // Erro silencioso - não exibir para o usuário
         }
       }
     };

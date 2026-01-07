@@ -48,8 +48,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
       <div className="w-full max-w-md">
         {/* Logo e Título */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-blue-600 rounded-3xl mb-6 shadow-2xl shadow-blue-500/30">
-            <Landmark size={40} className="text-white" />
+          <div className="inline-flex items-center justify-center w-24 h-24 bg-blue-600 rounded-3xl mb-6 shadow-2xl shadow-blue-500/30 p-4">
+            <img src="/ICONE - BRANCO.png" alt="Logo À Mesa" className="w-full h-full object-contain" />
           </div>
           <h1 className="text-4xl font-black text-white tracking-tighter mb-2">À MESA</h1>
           <p className="text-slate-400 font-medium">Gestão Financeira Ministerial</p>
