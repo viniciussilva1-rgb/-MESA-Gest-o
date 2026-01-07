@@ -474,22 +474,10 @@ const App: React.FC = () => {
 
   // Função para recalcular alocações de todas as transações com as percentagens atuais
   const recalcularAlocacoes = async () => {
-    // Verificar se há transferências internas que precisam ser removidas primeiro
-    const temTransferencias = transactions.some(tx => 
-      tx.description.toLowerCase().includes('reposição automática') ||
-      tx.description.toLowerCase().includes('transferência')
-    );
-    
-    if (temTransferencias) {
-      alert('Existem transações internas (reposições/transferências) que causam duplicação.\n\nRemova-as primeiro clicando em "Limpar Transferências Internas".');
-      return;
-    }
-    
-    if (!confirm('Isto irá recalcular todas as alocações de entradas.\n\nPercentagens atuais:\n' +
-      `- Emergência: ${config.fundPercentages.EMERGENCIA}%\n` +
-      `- Água/Luz: ${config.fundPercentages.UTILIDADES}%\n` +
-      `- Geral: ${config.fundPercentages.GERAL}%\n\n` +
-      'Continuar?')) {
+    if (!confirm(`RECALCULAR TODAS AS ALOCAÇÕES\n\n` +
+      `Meta de Renda: €${config.rentTarget}\n` +
+      `Percentagens: Emergência ${config.fundPercentages.EMERGENCIA}%, Água/Luz ${config.fundPercentages.UTILIDADES}%, Geral ${config.fundPercentages.GERAL}%\n\n` +
+      `Isso vai redistribuir todas as entradas corretamente.\nContinuar?`)) {
       return;
     }
 
@@ -497,30 +485,33 @@ const App: React.FC = () => {
     let erros = 0;
     let saldoRenda = 0;
 
+    // Filtrar apenas transações reais (sem transferências internas)
+    const transacoesReais = transactions.filter(tx => 
+      !tx.description.toLowerCase().includes('reposição automática') &&
+      !tx.description.toLowerCase().includes('transferência')
+    );
+
     // Ordenar por data para processar na ordem correta
-    const sortedTransactions = [...transactions].sort((a, b) => 
+    const sortedTransactions = [...transacoesReais].sort((a, b) => 
       new Date(a.date).getTime() - new Date(b.date).getTime()
     );
 
     console.log('=== INICIANDO RECÁLCULO ===');
-    console.log('Total de transações:', sortedTransactions.length);
+    console.log('Transações a processar:', sortedTransactions.length);
     console.log('Meta de Renda:', config.rentTarget);
 
     for (const tx of sortedTransactions) {
-      // Para saídas, apenas rastrear o impacto na reserva de renda
+      // Para saídas de RENDA, diminuir do saldo
       if (tx.type !== 'INCOME') {
         if (tx.category === 'RENDA') {
-          console.log(`Pagamento de renda: -€${tx.amount} (saldo renda: ${saldoRenda} -> ${Math.max(0, saldoRenda - tx.amount)})`);
           saldoRenda = Math.max(0, saldoRenda - tx.amount);
+          console.log(`Pagamento renda: -€${tx.amount}, Saldo renda agora: €${saldoRenda}`);
         }
         continue;
       }
       
       // Ignorar entradas do ministério infantil
-      if (tx.category === 'INFANTIL') {
-        console.log(`Ignorando INFANTIL: ${tx.description}`);
-        continue;
-      }
+      if (tx.category === 'INFANTIL') continue;
 
       const val = tx.amount;
       let newAllocations: Record<FundType, number> = {
@@ -542,35 +533,35 @@ const App: React.FC = () => {
           newAllocations.UTILIDADES = remaining * (config.fundPercentages.UTILIDADES / totalOtherPercentages);
           newAllocations.GERAL = remaining * (config.fundPercentages.GERAL / totalOtherPercentages);
         }
-        console.log(`${tx.description}: €${val} -> Renda: €${rentaAllocation.toFixed(2)}, Restante: €${remaining.toFixed(2)}`);
+        console.log(`ENTRADA ${tx.description}: €${val} -> Renda: €${rentaAllocation.toFixed(2)}, Outros: €${(val - rentaAllocation).toFixed(2)}`);
       } else {
         // Meta atingida - distribui tudo entre os outros fundos
         const totalOtherPercentages = config.fundPercentages.EMERGENCIA + config.fundPercentages.UTILIDADES + config.fundPercentages.GERAL;
         newAllocations.EMERGENCIA = val * (config.fundPercentages.EMERGENCIA / totalOtherPercentages);
         newAllocations.UTILIDADES = val * (config.fundPercentages.UTILIDADES / totalOtherPercentages);
         newAllocations.GERAL = val * (config.fundPercentages.GERAL / totalOtherPercentages);
-        console.log(`${tx.description}: €${val} -> Meta atingida, distribuindo entre outros fundos`);
+        console.log(`ENTRADA ${tx.description}: €${val} -> META ATINGIDA, tudo para outros fundos`);
       }
 
       // Atualizar no Firebase usando UPDATE
       try {
         await updateTransactionInFirestore(tx.id, { fundAllocations: newAllocations });
         recalculadas++;
-        console.log(`✓ Atualizado: ${tx.id}`);
       } catch (error) {
-        console.error('✗ Erro ao atualizar:', tx.id, error);
+        console.error('Erro ao atualizar:', tx.id, error);
         erros++;
       }
     }
 
     console.log('=== RECÁLCULO FINALIZADO ===');
-    console.log(`Recalculadas: ${recalculadas}, Erros: ${erros}`);
+    console.log(`Saldo final Renda: €${saldoRenda}`);
     
-    if (erros > 0) {
-      alert(`Recálculo concluído com ${erros} erro(s).\n${recalculadas} transações atualizadas.\n\nVerifique o console para detalhes.`);
-    } else {
-      alert(`✅ ${recalculadas} transação(ões) recalculada(s) com sucesso!\n\nSaldo final da Reserva de Renda: €${saldoRenda.toFixed(2)}`);
-    }
+    alert(`✅ Recálculo concluído!\n\n` +
+      `${recalculadas} transações atualizadas\n` +
+      `${erros} erros\n\n` +
+      `Reserva de Renda final: €${saldoRenda.toFixed(2)}\n` +
+      `(Meta: €${config.rentTarget})\n\n` +
+      `Atualize a página para ver os novos valores.`);
   };
 
   const renderDashboard = () => (
