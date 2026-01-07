@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { User } from 'firebase/auth';
 import { Transaction, FinancialStats, FundType, SystemConfig } from './types';
 import { FUND_INFO } from './constants';
@@ -18,9 +18,11 @@ import {
 } from './services/firestoreService';
 import { subscribeToAuthState, logout } from './services/authService';
 import { exportToExcel } from './services/exportService';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 import { 
   Wallet, TrendingUp, TrendingDown, History, Sparkles, 
-  Menu, Bell, LayoutDashboard, Landmark, Settings, FileText, Printer, ChevronRight, Search, Trash2, Cloud, CloudUpload, ExternalLink, CheckCircle2, AlertCircle, Database, LogOut, Download, FileSpreadsheet, RefreshCw
+  Menu, Bell, LayoutDashboard, Landmark, Settings, FileText, Printer, ChevronRight, Search, Trash2, Cloud, CloudUpload, ExternalLink, CheckCircle2, AlertCircle, Database, LogOut, Download, FileSpreadsheet, RefreshCw, Share2
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -30,6 +32,8 @@ const App: React.FC = () => {
   const [syncStatus, setSyncStatus] = useState<'IDLE' | 'SYNCING' | 'SUCCESS' | 'ERROR'>('IDLE');
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [migrationStatus, setMigrationStatus] = useState<string>('');
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const reportRef = useRef<HTMLDivElement>(null);
   
   const [transactions, setTransactions] = useState<Transaction[]>([]);
 
@@ -275,6 +279,67 @@ const App: React.FC = () => {
   };
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(val);
+
+  // Função para gerar PDF e compartilhar no WhatsApp
+  const compartilharWhatsApp = async () => {
+    if (!reportRef.current) return;
+    
+    setIsGeneratingPDF(true);
+    
+    try {
+      // Gerar imagem do relatório
+      const canvas = await html2canvas(reportRef.current, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff'
+      });
+      
+      // Criar PDF
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      
+      // Gerar blob do PDF
+      const pdfBlob = pdf.output('blob');
+      const pdfFile = new File([pdfBlob], `Relatorio_${config.churchName}_${new Date().toLocaleDateString('pt-PT').replace(/\//g, '-')}.pdf`, { type: 'application/pdf' });
+      
+      // Verificar se a Web Share API suporta arquivos
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+        await navigator.share({
+          title: `Relatório Financeiro - ${config.churchName}`,
+          text: `Relatório Financeiro do mês - ${config.churchName}\n\n📊 Entradas: ${formatCurrency(stats.totalIncome)}\n💸 Despesas: ${formatCurrency(stats.totalExpenses)}\n💰 Saldo: ${formatCurrency(stats.fundBalances.UTILIDADES + stats.fundBalances.GERAL)}`,
+          files: [pdfFile]
+        });
+      } else {
+        // Fallback: baixar PDF e abrir WhatsApp com texto
+        pdf.save(`Relatorio_${config.churchName}_${new Date().toLocaleDateString('pt-PT').replace(/\//g, '-')}.pdf`);
+        
+        const texto = encodeURIComponent(
+          `📋 *Relatório Financeiro - ${config.churchName}*\n\n` +
+          `📅 Data: ${new Date().toLocaleDateString('pt-PT')}\n\n` +
+          `📊 *Resumo:*\n` +
+          `✅ Entradas: ${formatCurrency(stats.totalIncome)}\n` +
+          `❌ Despesas: ${formatCurrency(stats.totalExpenses)}\n` +
+          `💰 Saldo Disponível: ${formatCurrency(stats.fundBalances.UTILIDADES + stats.fundBalances.GERAL)}\n\n` +
+          `🏠 Reserva Renda: ${formatCurrency(stats.fundBalances.ALUGUER)} / ${formatCurrency(config.rentTarget)}\n` +
+          `🚨 Emergência: ${formatCurrency(stats.fundBalances.EMERGENCIA)}\n` +
+          `💡 Água/Luz: ${formatCurrency(stats.fundBalances.UTILIDADES)}\n\n` +
+          `_PDF baixado no dispositivo_`
+        );
+        
+        window.open(`https://wa.me/?text=${texto}`, '_blank');
+      }
+    } catch (error) {
+      console.error('Erro ao gerar PDF:', error);
+      alert('Erro ao gerar o PDF. Tente usar o botão "Emitir PDF do Mês".');
+    } finally {
+      setIsGeneratingPDF(false);
+    }
+  };
 
   // Função para completar a reserva de renda usando o saldo disponível
   const completarReservaRenda = async () => {
@@ -665,7 +730,7 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      <div className="bg-white p-10 rounded-3xl shadow-xl border border-slate-100 print:shadow-none print:border-none">
+      <div ref={reportRef} className="bg-white p-10 rounded-3xl shadow-xl border border-slate-100 print:shadow-none print:border-none">
         <div className="flex justify-between items-start mb-12 border-b-2 border-slate-900 pb-8">
           <div className="flex gap-5 items-center">
             <img src="/logo-branco.png" alt="Logo" className="w-16 h-16 object-contain bg-slate-900 rounded-2xl p-2" />
@@ -674,9 +739,16 @@ const App: React.FC = () => {
               <p className="text-slate-500 font-bold uppercase text-xs tracking-widest">Relatório Mensal de Gestão Financeira</p>
             </div>
           </div>
-          <div className="text-right flex flex-col items-end print:hidden">
+          <div className="text-right flex flex-col items-end gap-2 print:hidden">
             <button onClick={() => window.print()} className="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-xl hover:bg-black transition-all shadow-lg font-bold">
               <Printer size={20} /> Emitir PDF do Mês
+            </button>
+            <button 
+              onClick={compartilharWhatsApp} 
+              disabled={isGeneratingPDF}
+              className="flex items-center gap-2 px-6 py-3 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-all shadow-lg font-bold disabled:opacity-50"
+            >
+              <Share2 size={20} /> {isGeneratingPDF ? 'Gerando...' : 'Enviar WhatsApp'}
             </button>
           </div>
         </div>
