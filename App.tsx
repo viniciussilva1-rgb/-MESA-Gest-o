@@ -746,8 +746,7 @@ const SummaryCard = ({ icon, title, value, color }: { icon: React.ReactNode, tit
 const ReportStat = ({ label, value, highlight }: { label: string, value: string, highlight?: boolean }) => (
   <div className={`p-6 rounded-2xl border-2 ${highlight ? 'bg-emerald-600 text-white border-emerald-700 shadow-lg ring-4 ring-emerald-200 print:ring-2 print:ring-emerald-400' : 'border-slate-100 bg-white'}`}>
     <p className={`text-[9px] font-black uppercase tracking-widest mb-2 ${highlight ? 'text-emerald-100' : 'text-slate-500'}`}>{label}</p>
-    <h4 className={`font-black tracking-tight ${highlight ? 'text-3xl' : 'text-2xl'}`}>{value}</h4>
-    {highlight && <p className="text-[8px] text-emerald-200 mt-2 font-bold uppercase">💰 Valor para uso imediato</p>}
+    <h4 className={`font-black tracking-tight ${highlight ? 'text-3xl print:text-black' : 'text-2xl'}`}>{value}</h4>
   </div>
 );
 
