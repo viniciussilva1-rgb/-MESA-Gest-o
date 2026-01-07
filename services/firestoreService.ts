@@ -40,14 +40,24 @@ export const subscribeToTransactions = (
 };
 
 export const addTransaction = async (transaction: Transaction): Promise<void> => {
+  console.log('=== FIRESTORE: Iniciando addTransaction ===');
+  console.log('Dados da transação:', JSON.stringify(transaction, null, 2));
+  
   try {
     const { id, ...transactionData } = transaction;
-    await addDoc(collection(db, TRANSACTIONS_COLLECTION), {
+    console.log('Enviando para collection:', TRANSACTIONS_COLLECTION);
+    
+    const docRef = await addDoc(collection(db, TRANSACTIONS_COLLECTION), {
       ...transactionData,
       createdAt: new Date().toISOString()
     });
-  } catch (error) {
-    console.error("Erro ao adicionar transação:", error);
+    
+    console.log('Transação salva com sucesso! ID:', docRef.id);
+  } catch (error: any) {
+    console.error('=== FIRESTORE: ERRO ao adicionar ===');
+    console.error('Código:', error?.code);
+    console.error('Mensagem:', error?.message);
+    console.error('Erro completo:', error);
     throw error;
   }
 };

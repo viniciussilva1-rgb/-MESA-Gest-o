@@ -106,7 +106,9 @@ const TransactionForm: React.FC<Props> = ({ onAdd, config, currentRentBalance })
     };
 
     try {
+      console.log('TransactionForm: Chamando onAdd com:', newTransaction);
       await onAdd(newTransaction);
+      console.log('TransactionForm: onAdd executado com sucesso');
       
       if (type === 'EXPENSE' && category === 'RENDA') {
         const repoTransaction: Transaction = {
@@ -125,15 +127,16 @@ const TransactionForm: React.FC<Props> = ({ onAdd, config, currentRentBalance })
           invoiceRef: undefined,
           hasAttachment: false
         };
+        console.log('TransactionForm: Criando reposição automática');
         await onAdd(repoTransaction);
       }
       
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 2000);
       resetForm();
-    } catch (error) {
-      console.error('Erro ao salvar:', error);
-      alert('Erro ao salvar a movimentação. Tente novamente.');
+    } catch (error: any) {
+      console.error('TransactionForm: Erro ao salvar:', error);
+      // Não mostra alerta aqui pois o App.tsx já mostra
     } finally {
       setIsSubmitting(false);
     }
