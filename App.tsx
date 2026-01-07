@@ -730,7 +730,7 @@ const App: React.FC = () => {
            <div>
              <h3 className="text-sm font-black text-slate-900 mb-8 uppercase tracking-widest border-l-4 border-slate-900 pl-4">Separação de Verbas por Fundo</h3>
              <div className="space-y-6">
-                {Object.entries(stats.fundBalances).map(([fund, balance]) => (
+                {Object.entries(stats.fundBalances).filter(([fund]) => fund !== 'GERAL').map(([fund, balance]) => (
                   <div key={fund}>
                     <div className="flex justify-between mb-2">
                       <span className="text-xs font-bold text-slate-600 uppercase">{FUND_INFO[fund as FundType]?.label || fund}</span>
@@ -1007,7 +1007,7 @@ const FundDistribution = ({ stats }: { stats: FinancialStats }) => (
   <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 h-full">
     <h3 className="text-sm font-bold text-slate-800 mb-6">Distribuição por Fundos</h3>
     <div className="space-y-5">
-      {Object.entries(stats.fundBalances).map(([key, balance]) => {
+      {Object.entries(stats.fundBalances).filter(([key]) => key !== 'GERAL').map(([key, balance]) => {
         const info = FUND_INFO[key as FundType];
         if (!info) return null;
         return (
