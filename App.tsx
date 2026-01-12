@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { User } from 'firebase/auth';
-import { Transaction, FinancialStats, FundType, SystemConfig } from './types';
+import { Transaction, FinancialStats, FundType, SystemConfig, ReportHistory } from './types';
 import { FUND_INFO } from './constants';
 import TransactionForm from './components/TransactionForm';
 import DashboardCharts from './components/DashboardCharts';
@@ -14,7 +14,9 @@ import {
   updateTransaction as updateTransactionInFirestore,
   deleteTransaction as deleteTransactionFromFirestore,
   saveConfig,
-  migrateFromLocalStorage 
+  migrateFromLocalStorage,
+  saveReportHistory,
+  subscribeToReportsHistory
 } from './services/firestoreService';
 import { subscribeToAuthState, logout } from './services/authService';
 import { exportToExcel } from './services/exportService';
@@ -36,13 +38,15 @@ const App: React.FC = () => {
   const reportRef = useRef<HTMLDivElement>(null);
   
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [reportsHistory, setReportsHistory] = useState<ReportHistory[]>([]);
 
   const defaultConfig: SystemConfig = {
     churchName: 'Igreja  À MESA',
     fundPercentages: { ALUGUER: 40, EMERGENCIA: 10, UTILIDADES: 20, GERAL: 30 },
     rentTarget: 1350,
     rentAmount: 450,
-    sheetsUrl: ''
+    sheetsUrl: '',
+    emergencyInitialBalance: 98.15 // Saldo do último relatório emitido
   };
 
   const [config, setConfig] = useState<SystemConfig>(defaultConfig);
@@ -130,6 +134,16 @@ const App: React.FC = () => {
     return () => unsubscribe();
   }, [user]);
 
+  // Escutar histórico de relatórios do Firebase
+  useEffect(() => {
+    if (!user) return;
+    
+    const unsubscribe = subscribeToReportsHistory((reports) => {
+      setReportsHistory(reports);
+    });
+    return () => unsubscribe();
+  }, [user]);
+
   // Salvar configurações automaticamente quando mudam (após carregamento inicial)
   useEffect(() => {
     if (!user || !configLoaded) return;
@@ -156,7 +170,8 @@ const App: React.FC = () => {
     
     // Saldos dos fundos - calculados automaticamente
     let saldoRenda = 0;
-    let saldoEmergencia = 0;
+    // Iniciar com saldo do último relatório (se existir) - o fundo de emergência só cresce com entradas
+    let saldoEmergencia = config.emergencyInitialBalance || 0;
     let saldoUtilidades = 0; // Água, Luz, TV
     let saldoGeral = 0; // Saldo Disponível
     let saldoInfantil = 0;
@@ -195,7 +210,7 @@ const App: React.FC = () => {
             valor -= paraRenda;
           }
           
-          // 2º 10% para emergência
+          // 2º 10% para emergência (só aumenta, nunca diminui exceto por saída específica)
           if (valor > 0) {
             const paraEmergencia = valor * PERCENT_EMERGENCIA;
             saldoEmergencia += paraEmergencia;
@@ -240,8 +255,8 @@ const App: React.FC = () => {
             saldoUtilidades = 0;
             saldoGeral -= falta;
           }
-        } else if (tx.category === 'MANUTENCAO') {
-          // Emergência/Manutenção - sai do fundo de emergência, se faltar busca no Saldo Disponível
+        } else if (tx.category === 'EMERGENCIA') {
+          // Saída específica do fundo de emergência - SÓ aqui o fundo diminui
           totalExpenses += tx.amount;
           if (saldoEmergencia >= tx.amount) {
             saldoEmergencia -= tx.amount;
@@ -251,7 +266,7 @@ const App: React.FC = () => {
             saldoGeral -= falta;
           }
         } else {
-          // Outras despesas - sai do Saldo Disponível
+          // Outras despesas (incluindo MANUTENCAO) - sai do Saldo Disponível
           totalExpenses += tx.amount;
           saldoGeral -= tx.amount;
         }
@@ -362,6 +377,41 @@ const App: React.FC = () => {
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(val);
 
+  // Função para salvar relatório no histórico
+  const salvarRelatorioHistorico = async () => {
+    if (!user) return;
+    
+    const report: ReportHistory = {
+      date: new Date().toISOString(),
+      totalIncome: stats.totalIncome,
+      totalExpenses: stats.totalExpenses,
+      netBalance: stats.netBalance,
+      fundBalances: stats.fundBalances,
+      infantilIncome: stats.infantilIncome,
+      infantilExpenses: stats.infantilExpenses,
+      generatedBy: user.email || undefined,
+      createdAt: new Date().toISOString()
+    };
+    
+    try {
+      await saveReportHistory(report);
+      
+      // Atualizar o saldo inicial de emergência para o próximo período
+      // O saldo de emergência atual passa a ser o saldo inicial
+      const novoConfig = {
+        ...config,
+        emergencyInitialBalance: stats.fundBalances.EMERGENCIA
+      };
+      await saveConfig(novoConfig);
+      setConfig(novoConfig);
+      
+      alert('✅ Relatório salvo no histórico com sucesso!\n\nO saldo de emergência foi atualizado para €' + stats.fundBalances.EMERGENCIA.toFixed(2));
+    } catch (error) {
+      console.error('Erro ao salvar relatório:', error);
+      alert('Erro ao salvar relatório no histórico.');
+    }
+  };
+
   // Função para baixar PDF do relatório
   const baixarPDF = async () => {
     if (!reportRef.current) return;
@@ -388,6 +438,11 @@ const App: React.FC = () => {
       // Baixar o PDF
       const nomeArquivo = `Relatorio_${config.churchName.replace(/\s+/g, '_')}_${new Date().toLocaleDateString('pt-PT').replace(/\//g, '-')}.pdf`;
       pdf.save(nomeArquivo);
+      
+      // Perguntar se deseja salvar no histórico
+      if (confirm('Deseja salvar este relatório no histórico para consultas futuras?')) {
+        await salvarRelatorioHistorico();
+      }
       
     } catch (error) {
       console.error('Erro ao gerar PDF:', error);
@@ -773,6 +828,12 @@ const App: React.FC = () => {
             >
               <FileSpreadsheet size={20} /> Baixar Excel
             </button>
+            <button 
+              onClick={salvarRelatorioHistorico}
+              className="flex items-center gap-2 px-6 py-3 bg-emerald-800 text-white rounded-xl hover:bg-emerald-900 transition-all shadow-lg font-bold"
+            >
+              <History size={20} /> Salvar no Histórico
+            </button>
           </div>
         </div>
       </div>
@@ -825,6 +886,53 @@ const App: React.FC = () => {
            </div>
         </div>
       </div>
+
+      {/* Histórico de Relatórios */}
+      {reportsHistory.length > 0 && (
+        <div className="bg-white p-8 rounded-3xl shadow-xl border border-slate-100 print:hidden">
+          <h3 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-3">
+            <History size={24} className="text-blue-600" /> Histórico de Relatórios
+          </h3>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-black text-slate-500 uppercase">Data</th>
+                  <th className="px-4 py-3 text-right text-xs font-black text-slate-500 uppercase">Entradas</th>
+                  <th className="px-4 py-3 text-right text-xs font-black text-slate-500 uppercase">Saídas</th>
+                  <th className="px-4 py-3 text-right text-xs font-black text-slate-500 uppercase">Saldo</th>
+                  <th className="px-4 py-3 text-right text-xs font-black text-slate-500 uppercase">Emergência</th>
+                  <th className="px-4 py-3 text-right text-xs font-black text-slate-500 uppercase">Reserva Renda</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {reportsHistory.map((report) => (
+                  <tr key={report.id} className="hover:bg-slate-50">
+                    <td className="px-4 py-3 text-sm font-bold text-slate-700">
+                      {new Date(report.date).toLocaleDateString('pt-PT', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm font-bold text-emerald-600">
+                      {formatCurrency(report.totalIncome)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm font-bold text-red-600">
+                      {formatCurrency(report.totalExpenses)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm font-black text-slate-900">
+                      {formatCurrency(report.netBalance)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm font-bold text-red-600">
+                      {formatCurrency(report.fundBalances.EMERGENCIA)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm font-bold text-blue-600">
+                      {formatCurrency(report.fundBalances.ALUGUER)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -855,6 +963,26 @@ const App: React.FC = () => {
               className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-black text-blue-600" 
             />
             <p className="text-xs text-slate-500 mt-1">Meta automática: 3x €{config.rentAmount} = €{config.rentTarget}</p>
+          </div>
+
+          <div className="p-6 bg-red-50 rounded-2xl border border-red-100 space-y-4">
+            <h4 className="text-sm font-black text-red-900 uppercase tracking-widest flex items-center gap-2">
+              <Landmark size={18} /> Fundo de Emergência
+            </h4>
+            <div>
+              <label className="block text-xs font-black text-slate-500 uppercase mb-2">Saldo Inicial (€)</label>
+              <input 
+                type="number" 
+                step="0.01"
+                value={config.emergencyInitialBalance || 0}
+                onChange={(e) => setConfig({...config, emergencyInitialBalance: parseFloat(e.target.value) || 0})}
+                className="w-full px-4 py-3 bg-white border border-red-200 rounded-xl focus:ring-2 focus:ring-red-500 outline-none font-black text-red-600" 
+              />
+              <p className="text-xs text-slate-500 mt-2">
+                Este valor é atualizado automaticamente quando você salva um relatório no histórico.
+                <br />O fundo de emergência só diminui quando você usa a categoria "Usar Fundo de Emergência" nas saídas.
+              </p>
+            </div>
           </div>
 
           <div className="p-6 bg-emerald-50 rounded-2xl border border-emerald-100 space-y-4">

@@ -8,14 +8,16 @@ import {
   query,
   orderBy,
   onSnapshot,
-  setDoc
+  setDoc,
+  limit
 } from "firebase/firestore";
 import { db } from "./firebase";
-import { Transaction, SystemConfig } from "../types";
+import { Transaction, SystemConfig, ReportHistory } from "../types";
 
 const TRANSACTIONS_COLLECTION = "transactions";
 const CONFIG_COLLECTION = "config";
 const CONFIG_DOC_ID = "system_config";
+const REPORTS_COLLECTION = "reports_history";
 
 // ============ TRANSACTIONS ============
 
@@ -160,4 +162,52 @@ export const migrateFromLocalStorage = async (): Promise<{ transactions: number;
   }
 
   return { transactions: migratedTransactions, config: migratedConfig };
+};
+
+// ============ REPORTS HISTORY ============
+
+export const saveReportHistory = async (report: ReportHistory): Promise<string> => {
+  try {
+    const { id, ...reportData } = report;
+    const docRef = await addDoc(collection(db, REPORTS_COLLECTION), {
+      ...reportData,
+      createdAt: new Date().toISOString()
+    });
+    console.log('Relatório salvo no histórico! ID:', docRef.id);
+    return docRef.id;
+  } catch (error) {
+    console.error("Erro ao salvar relatório:", error);
+    throw error;
+  }
+};
+
+export const subscribeToReportsHistory = (
+  callback: (reports: ReportHistory[]) => void,
+  onError?: (error: Error) => void
+) => {
+  const q = query(collection(db, REPORTS_COLLECTION), orderBy("date", "desc"), limit(50));
+  
+  return onSnapshot(q, (snapshot) => {
+    const reports: ReportHistory[] = [];
+    snapshot.forEach((doc) => {
+      reports.push({ id: doc.id, ...doc.data() } as ReportHistory);
+    });
+    callback(reports);
+  }, (error) => {
+    console.error("Erro ao ouvir histórico de relatórios:", error);
+    if (onError) onError(error);
+  });
+};
+
+export const getLatestReport = async (): Promise<ReportHistory | null> => {
+  try {
+    const q = query(collection(db, REPORTS_COLLECTION), orderBy("date", "desc"), limit(1));
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) return null;
+    const doc = snapshot.docs[0];
+    return { id: doc.id, ...doc.data() } as ReportHistory;
+  } catch (error) {
+    console.error("Erro ao buscar último relatório:", error);
+    return null;
+  }
 };

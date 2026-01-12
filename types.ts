@@ -7,6 +7,20 @@ export interface SystemConfig {
   rentTarget: number;
   rentAmount: number; // Valor da renda mensal (ex: 450€)
   sheetsUrl?: string; // URL do Webhook do Google Apps Script
+  emergencyInitialBalance?: number; // Saldo inicial do fundo de emergência (do último relatório)
+}
+
+export interface ReportHistory {
+  id?: string;
+  date: string; // Data de emissão do relatório
+  totalIncome: number;
+  totalExpenses: number;
+  netBalance: number;
+  fundBalances: Record<FundType, number>;
+  infantilIncome: number;
+  infantilExpenses: number;
+  generatedBy?: string; // Email do usuário que gerou
+  createdAt: string;
 }
 
 export interface CashCount {
@@ -24,7 +38,7 @@ export interface Transaction {
   description: string;
   amount: number;
   type: 'INCOME' | 'EXPENSE';
-  category: 'DIZIMO' | 'OFERTA' | 'INFANTIL' | 'CONTA' | 'MANUTENCAO' | 'SOCIAL' | 'RENDA' | 'OUTROS';
+  category: 'DIZIMO' | 'OFERTA' | 'INFANTIL' | 'CONTA' | 'MANUTENCAO' | 'SOCIAL' | 'RENDA' | 'OUTROS' | 'EMERGENCIA';
   fundAllocations: Record<FundType, number>;
   cashCount?: CashCount;
   invoiceRef?: string;
