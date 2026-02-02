@@ -300,22 +300,22 @@ const App: React.FC = () => {
     console.groupEnd();
     // -----------------------------------------------------------
 
-    const cashOnHand = availableBalance + currentRentTotal + currentEmergencyTotal + (infantilInc - infantilExp);
+    const cashOnHand = (availableBalance ?? 0) + (currentRentTotal ?? 0) + (currentEmergencyTotal ?? 0) + (infantilInc - infantilExp);
 
     return { 
-      openingBalance: openingBalanceGeral,
-      totalIncome: entradasTotais, 
-      totalExpenses: totalOutflowParaExibicao, // Usar o valor que inclui reservas para o Dashboard
-      netBalance: cashOnHand, 
+      openingBalance: openingBalanceGeral ?? 0,
+      totalIncome: entradasTotais ?? 0, 
+      totalExpenses: totalOutflowParaExibicao ?? 0, 
+      netBalance: cashOnHand ?? 0, 
       fundBalances: {
-        ALUGUER: currentRentTotal,
-        EMERGENCIA: currentEmergencyTotal,
-        GERAL: availableBalance,
-        INFANTIL: infantilInc - infantilExp
+        ALUGUER: currentRentTotal ?? 0,
+        EMERGENCIA: currentEmergencyTotal ?? 0,
+        GERAL: availableBalance ?? 0,
+        INFANTIL: (infantilInc - infantilExp) ?? 0
       },
-      infantilIncome: infantilInc,
-      infantilExpenses: infantilExp,
-      realChurchExpenses: saidasTotais // Campo extra para auditoria se necessário
+      infantilIncome: infantilInc ?? 0,
+      infantilExpenses: infantilExp ?? 0,
+      realChurchExpenses: saidasTotais ?? 0
     };
   }, [transactions, treasurySummary, reportsHistory]);
 
@@ -479,14 +479,14 @@ const App: React.FC = () => {
     
     const report: ReportHistory = {
       date: new Date().toISOString(),
-      openingBalance: stats.openingBalance,
-      closingBalance: stats.fundBalances.GERAL,
-      totalIncome: stats.totalIncome,
-      totalExpenses: stats.totalExpenses,
-      netBalance: stats.netBalance,
-      fundBalances: stats.fundBalances,
-      infantilIncome: stats.infantilIncome,
-      infantilExpenses: stats.infantilExpenses,
+      openingBalance: stats.openingBalance ?? 0,
+      closingBalance: stats.fundBalances?.GERAL ?? 0,
+      totalIncome: stats.totalIncome ?? 0,
+      totalExpenses: stats.totalExpenses ?? 0,
+      netBalance: stats.netBalance ?? 0,
+      fundBalances: stats.fundBalances ?? { ALUGUER: 0, EMERGENCIA: 0, GERAL: 0, INFANTIL: 0 },
+      infantilIncome: stats.infantilIncome ?? 0,
+      infantilExpenses: stats.infantilExpenses ?? 0,
       generatedBy: user.email || undefined,
       createdAt: new Date().toISOString()
     };
