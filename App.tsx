@@ -609,6 +609,38 @@ const App: React.FC = () => {
     alert(`${removidas} transação(ões) removida(s) com sucesso!\n\nAgora clique em "Recalcular Alocações".`);
   };
 
+  // Função para LIMPAR UTILIDADES de todas as transações (migração de urgência)
+  const limparUtilidades = async () => {
+    if (!confirm(`LIMPEZA DE EMERGÊNCIA: REMOVER UTILIDADES\n\nIsso vai zerar o campo fundAllocations.UTILIDADES de TODAS as transações.\n\nContinuar?`)) {
+      return;
+    }
+
+    let atualizadas = 0;
+    let erros = 0;
+
+    for (const tx of transactions) {
+      if (tx.fundAllocations.UTILIDADES !== 0) {
+        try {
+          // Zerar UTILIDADES e redistribuir para GERAL
+          const novasAlocacoes = {
+            ...tx.fundAllocations,
+            GERAL: (tx.fundAllocations.GERAL || 0) + (tx.fundAllocations.UTILIDADES || 0),
+            UTILIDADES: 0
+          };
+          await updateTransactionInFirestore(tx.id, { fundAllocations: novasAlocacoes });
+          atualizadas++;
+          console.log(`✅ Limpeza ${tx.description}: UTILIDADES movido para GERAL`);
+        } catch (error) {
+          console.error('Erro ao limpar:', tx.id, error);
+          erros++;
+        }
+      }
+    }
+
+    alert(`${atualizadas} transação(ões) limpas com sucesso!\n${erros} erros.\n\nA página será recarregada para refletir as mudanças.`);
+    setTimeout(() => window.location.reload(), 2000);
+  };
+
   // Função para recalcular alocações de todas as transações com as percentagens atuais
   const recalcularAlocacoes = async () => {
     if (!confirm(`RECALCULAR TODAS AS ALOCAÇÕES\n\n` +
@@ -1059,9 +1091,15 @@ const App: React.FC = () => {
                 <p className="text-xs font-bold text-amber-800 mb-3">🧹 Limpar dados antigos com problemas:</p>
                 <button 
                   onClick={limparTransferenciasInternas} 
-                  className="w-full py-2 bg-amber-500 text-white font-bold hover:bg-amber-600 rounded-lg transition-all flex items-center justify-center gap-2 text-sm"
+                  className="w-full py-2 bg-amber-500 text-white font-bold hover:bg-amber-600 rounded-lg transition-all flex items-center justify-center gap-2 text-sm mb-2"
                 >
                   <Trash2 size={14} /> Remover Transferências Internas Antigas
+                </button>
+                <button 
+                  onClick={limparUtilidades} 
+                  className="w-full py-2 bg-red-500 text-white font-bold hover:bg-red-600 rounded-lg transition-all flex items-center justify-center gap-2 text-sm"
+                >
+                  <Trash2 size={14} /> [URGÊNCIA] Limpar UTILIDADES
                 </button>
               </div>
             </div>
