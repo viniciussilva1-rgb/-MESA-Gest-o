@@ -201,30 +201,33 @@ const App: React.FC = () => {
           totalIncome += tx.amount;
           let valor = tx.amount;
           
-          // Calcular percentuais sobre a entrada ORIGINAL
-          const paraEmergencia = tx.amount * PERCENT_EMERGENCIA;    // 10% do total
-          const paraUtilidades = tx.amount * PERCENT_UTILIDADES;    // 10% do total
+          // 10% para emergência APENAS se for DIZIMO (ofertas/dízimos)
+          let paraEmergencia = 0;
+          if (tx.category === 'DIZIMO') {
+            paraEmergencia = tx.amount * PERCENT_EMERGENCIA;  // 10% apenas de DIZIMO
+            saldoEmergencia += paraEmergencia;
+            valor -= paraEmergencia;
+          }
           
-          // Agora destribuir o restante
-          let valorRestante = tx.amount - paraEmergencia - paraUtilidades;
+          // 10% para Água/Luz/TV APENAS se for DIZIMO
+          let paraUtilidades = 0;
+          if (tx.category === 'DIZIMO') {
+            paraUtilidades = tx.amount * PERCENT_UTILIDADES;  // 10% apenas de DIZIMO
+            saldoUtilidades += paraUtilidades;
+            valor -= paraUtilidades;
+          }
           
           // 1º Preencher reserva de renda até a meta
           const faltaRenda = Math.max(0, META_RENDA - saldoRenda);
           if (faltaRenda > 0) {
-            const paraRenda = Math.min(valorRestante, faltaRenda);
+            const paraRenda = Math.min(valor, faltaRenda);
             saldoRenda += paraRenda;
-            valorRestante -= paraRenda;
+            valor -= paraRenda;
           }
           
-          // 2º Adicionar emergência
-          saldoEmergencia += paraEmergencia;
-          
-          // 3º Adicionar utilidades
-          saldoUtilidades += paraUtilidades;
-          
           // 4º Resto vai para Saldo Disponível (Geral)
-          if (valorRestante > 0) {
-            saldoGeral += valorRestante;
+          if (valor > 0) {
+            saldoGeral += valor;
           }
         }
       } else {
