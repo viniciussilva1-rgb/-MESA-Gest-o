@@ -46,7 +46,7 @@ const App: React.FC = () => {
     rentTarget: 1350,
     rentAmount: 450,
     sheetsUrl: '',
-    emergencyInitialBalance: 98.15 // Saldo do último relatório emitido
+    emergencyInitialBalance: 0 // Saldo será calculado apenas a partir das transações
   };
 
   const [config, setConfig] = useState<SystemConfig>(defaultConfig);
@@ -127,7 +127,8 @@ const App: React.FC = () => {
     
     const unsubscribe = subscribeToConfig((firebaseConfig) => {
       if (firebaseConfig) {
-        setConfig(firebaseConfig);
+        // Resetar emergencyInitialBalance para 0 (será calculado apenas a partir das transações)
+        setConfig({...firebaseConfig, emergencyInitialBalance: 0});
       }
       setConfigLoaded(true);
     });
