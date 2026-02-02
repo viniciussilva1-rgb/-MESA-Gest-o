@@ -171,8 +171,8 @@ const App: React.FC = () => {
     
     // Saldos dos fundos - calculados automaticamente
     let saldoRenda = 0;
-    // Iniciar com saldo do último relatório (se existir) - o fundo de emergência só cresce com entradas
-    let saldoEmergencia = config.emergencyInitialBalance || 0;
+    // Saldo de emergência calculado APENAS a partir das transações (10% de DIZIMO e OUTROS)
+    let saldoEmergencia = 0;
     let saldoUtilidades = 0; // Água, Luz, TV
     let saldoGeral = 0; // Saldo Disponível
     let saldoInfantil = 0;
@@ -302,7 +302,7 @@ const App: React.FC = () => {
       infantilIncome,
       infantilExpenses
     };
-  }, [transactions, config.rentTarget, config.emergencyInitialBalance]);
+  }, [transactions, config.rentTarget]);
 
   const chartHistory = useMemo(() => {
     const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun'];
