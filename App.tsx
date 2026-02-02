@@ -202,6 +202,11 @@ const App: React.FC = () => {
     transacoesOrdenadas.forEach((tx) => {
       const isInfantil = tx.category === 'INFANTIL';
       
+      // DEBUG: Monitorar transações CONTA
+      if (tx.category === 'CONTA') {
+        console.log(`📋 CONTA detectada: ${tx.description} €${tx.amount} | Antes: saldoUtilidades=${saldoUtilidades.toFixed(2)}`);
+      }
+      
       if (tx.type === 'INCOME') {
         // === ENTRADAS ===
         if (isInfantil) {
@@ -285,6 +290,11 @@ const App: React.FC = () => {
       GERAL: saldoGeral, // Saldo Disponível
       INFANTIL: saldoInfantil 
     };
+    
+    // DEBUG: Verificar se saldoUtilidades está sendo alimentado de forma inesperada
+    if (saldoUtilidades !== 0) {
+      console.warn(`⚠️ UTILIDADES não deveria ter valor! saldoUtilidades=${saldoUtilidades.toFixed(2)}, GERAL=${saldoGeral.toFixed(2)}`);
+    }
     
     return { 
       totalIncome, 
