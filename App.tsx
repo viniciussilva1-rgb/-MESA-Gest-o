@@ -922,33 +922,36 @@ const App: React.FC = () => {
       ? [...reportsHistory].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
       : null;
 
-    // Gerar resumo diário dinâmico apenas do período atual (após último snapshot)
-    const filteredForReport = lastReport 
+    // Listar CADA LANÇAMENTO INDIVIDUAL do período atual (após último snapshot)
+    const reportTransactions = lastReport 
       ? transactions.filter(tx => new Date(tx.date).getTime() > new Date(lastReport.date).getTime())
       : transactions;
 
-    const dailyData = filteredForReport.reduce((acc: any, tx) => {
-      const date = new Date(tx.date).toLocaleDateString('pt-PT');
-      if (!acc[date]) acc[date] = { income: 0, expense: 0 };
+    // Ordenar cronologicamente para o cálculo do saldo acumulado
+    const chronoSorted = [...reportTransactions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    let runningBalance = stats.openingBalance ?? 0;
+    const transactionsWithBalance = chronoSorted.map(tx => {
+      let income = 0;
+      let expense = 0;
       
       if (tx.category !== 'INFANTIL') {
         if (tx.type === 'INCOME' && tx.category !== 'ALOCACAO_RENDA') {
-          acc[date].income += tx.amount;
+          income = tx.amount ?? 0;
+          runningBalance += income;
         } else if (tx.type === 'EXPENSE' || tx.category === 'ALOCACAO_RENDA') {
-          // Incluindo ALOCACAO_RENDA como "saída" do fundo disponível para bater com o que sumiu do card
-          acc[date].expense += tx.amount;
+          expense = tx.amount ?? 0;
+          runningBalance -= expense;
         }
       }
-      return acc;
-    }, {});
-
-    const sortedDays = Object.entries(dailyData)
-      .map(([date, values]: [string, any]) => ({ date, ...values }))
-      .sort((a, b) => {
-        const dateA = a.date.split('/').reverse().join('-');
-        const dateB = b.date.split('/').reverse().join('-');
-        return dateB.localeCompare(dateA);
-      });
+      
+      return { 
+        ...tx, 
+        income, 
+        expense, 
+        accumulated: runningBalance 
+      };
+    });
 
     return (
       <div className="space-y-8 animate-in zoom-in-95 duration-500 print:bg-white print:p-0">
@@ -996,25 +999,25 @@ const App: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-12">
-            <ReportStat label="Saldo Inicial" value={formatCurrency(stats.openingBalance)} />
-            <ReportStat label="Entradas (Mês)" value={formatCurrency(stats.totalIncome)} />
-            <ReportStat label="Saídas/Reservas" value={formatCurrency(stats.totalExpenses)} />
-            <ReportStat label="Saldo Final Geral" value={formatCurrency(stats.fundBalances.GERAL)} highlight />
-            <ReportStat label="Caixa Total" value={formatCurrency(stats.netBalance)} />
+            <ReportStat label="Saldo Inicial" value={formatCurrency(stats.openingBalance ?? 0)} />
+            <ReportStat label="Entradas (Mês)" value={formatCurrency(stats.totalIncome ?? 0)} />
+            <ReportStat label="Saídas/Reservas" value={formatCurrency(stats.totalExpenses ?? 0)} />
+            <ReportStat label="Saldo Final Geral" value={formatCurrency(stats.fundBalances?.GERAL ?? 0)} highlight />
+            <ReportStat label="Caixa Total" value={formatCurrency(stats.netBalance ?? 0)} />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
             <div>
               <h3 className="text-sm font-black text-slate-900 mb-8 uppercase tracking-widest border-l-4 border-slate-900 pl-4">Separação de Verbas por Fundo</h3>
               <div className="space-y-6">
-                  {Object.entries(stats.fundBalances).filter(([fund]) => fund !== 'GERAL').map(([fund, balance]) => (
+                  {Object.entries(stats.fundBalances ?? {}).filter(([fund]) => fund !== 'GERAL').map(([fund, balance]) => (
                     <div key={fund}>
                       <div className="flex justify-between mb-2">
                         <span className="text-xs font-bold text-slate-600 uppercase">{FUND_INFO[fund as FundType]?.label || fund}</span>
-                        <span className="text-sm font-black text-slate-900">{formatCurrency(balance as number)}</span>
+                        <span className="text-sm font-black text-slate-900">{formatCurrency((balance as number) ?? 0)}</span>
                       </div>
                       <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
-                        <div className="h-full rounded-full transition-all duration-1000" style={{ backgroundColor: FUND_INFO[fund as FundType]?.color || '#ccc', width: `${Math.max(0, (balance as number / (stats.totalIncome || 1)) * 100)}%` }} />
+                        <div className="h-full rounded-full transition-all duration-1000" style={{ backgroundColor: FUND_INFO[fund as FundType]?.color || '#ccc', width: `${Math.max(0, (((balance as number) ?? 0) / (stats.totalIncome || 1)) * 100)}%` }} />
                       </div>
                     </div>
                   ))}
@@ -1069,7 +1072,7 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {/* Histórico Dinâmico por Dia */}
+        {/* Histórico de Movimentações (Listagem Individual) */}
         <div className="bg-white p-8 rounded-3xl shadow-xl border border-slate-100 print:hidden">
           <h3 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-3">
             <History size={24} className="text-blue-600" /> Histórico de Movimentações Reais
@@ -1078,52 +1081,61 @@ const App: React.FC = () => {
             <table className="w-full">
               <thead className="bg-slate-50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-black text-slate-500 uppercase">Data</th>
-                  <th className="px-4 py-3 text-right text-xs font-black text-slate-500 uppercase">Entradas dia</th>
-                  <th className="px-4 py-3 text-right text-xs font-black text-slate-500 uppercase">Saídas dia</th>
-                  <th className="px-4 py-3 text-right text-xs font-black text-slate-500 uppercase">Balanço dia</th>
-                  <th className="px-4 py-3 text-right text-xs font-black text-slate-900 uppercase">Emergência (Atual)</th>
-                  <th className="px-4 py-3 text-right text-xs font-black text-slate-900 uppercase">Reserva Renda (Atual)</th>
+                  <th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">Data</th>
+                  <th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">Descrição</th>
+                  <th className="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase">Categoria</th>
+                  <th className="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase">Entrada (€)</th>
+                  <th className="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase">Saída (€)</th>
+                  <th className="px-4 py-3 text-right text-[10px] font-black text-slate-900 uppercase">Saldo Acum. (€)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {/* Saldo Inicial do Período */}
-                <tr className="bg-blue-50/30">
-                  <td className="px-4 py-3 text-sm font-black text-blue-800 uppercase">Saldo Inicial (Snaphot Anterior)</td>
-                  <td className="px-4 py-3 text-right text-sm text-slate-400">---</td>
-                  <td className="px-4 py-3 text-right text-sm text-slate-400">---</td>
-                  <td className="px-4 py-3 text-right text-sm font-black text-blue-800">{formatCurrency(stats.openingBalance)}</td>
-                  <td className="px-4 py-3 text-right text-sm text-slate-400 italic">--</td>
-                  <td className="px-4 py-3 text-right text-sm text-slate-400 italic">--</td>
+                <tr className="bg-blue-50/50">
+                  <td className="px-4 py-3 text-[11px] font-bold text-blue-900 border-r border-blue-100/30">
+                    {lastReport ? new Date(lastReport.date).toLocaleDateString('pt-PT') : 'Início'}
+                  </td>
+                  <td className="px-4 py-3 text-[11px] font-black text-blue-900 uppercase" colSpan={4}>Saldo Inicial (Transporte de Período Anterior)</td>
+                  <td className="px-4 py-3 text-right text-[11px] font-black text-blue-900">{formatCurrency(stats.openingBalance ?? 0)}</td>
                 </tr>
 
-                {/* Linha de Total Acumulado (Consistente com o Topo) */}
-                <tr className="bg-slate-100/50 font-black">
-                  <td className="px-4 py-3 text-sm text-slate-900 uppercase">MOVIMENTAÇÃO DO PERÍODO</td>
-                  <td className="px-4 py-3 text-right text-sm text-emerald-600">{formatCurrency(stats.totalIncome)}</td>
-                  <td className="px-4 py-3 text-right text-sm text-red-600">{formatCurrency(stats.totalExpenses)}</td>
-                  <td className="px-4 py-3 text-right text-sm text-slate-900">{formatCurrency(stats.totalIncome - stats.totalExpenses)}</td>
-                  <td className="px-4 py-3 text-right text-sm text-slate-900">{formatCurrency(stats.fundBalances.EMERGENCIA)}</td>
-                  <td className="px-4 py-3 text-right text-sm text-slate-900">{formatCurrency(stats.fundBalances.ALUGUER)}</td>
-                </tr>
-                
-                {/* Linhas Diárias Dinâmicas */}
-                {sortedDays.map((day) => (
-                  <tr key={day.date} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 text-sm font-bold text-slate-700">{day.date}</td>
-                    <td className="px-4 py-3 text-right text-sm font-bold text-emerald-600">{formatCurrency(day.income)}</td>
-                    <td className="px-4 py-3 text-right text-sm font-bold text-red-600">{formatCurrency(day.expense)}</td>
-                    <td className="px-4 py-3 text-right text-sm font-black text-slate-900">{formatCurrency(day.income - day.expense)}</td>
-                    <td className="px-4 py-3 text-right text-sm text-slate-400 italic">--</td>
-                    <td className="px-4 py-3 text-right text-sm text-slate-400 italic">--</td>
+                {/* Linhas de Lançamentos Individuais */}
+                {transactionsWithBalance.map((tx) => (
+                  <tr key={tx.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-4 py-3 text-[11px] font-medium text-slate-500 whitespace-nowrap">
+                      {new Date(tx.date).toLocaleDateString('pt-PT')}
+                    </td>
+                    <td className="px-4 py-3 text-[11px] font-bold text-slate-900 uppercase tracking-tighter">
+                      {tx.description || 'Sem descrição'}
+                    </td>
+                    <td className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase">
+                      {tx.category}
+                    </td>
+                    <td className="px-4 py-3 text-right text-[11px] font-bold text-emerald-600">
+                      {tx.income > 0 ? formatCurrency(tx.income) : '-'}
+                    </td>
+                    <td className="px-4 py-3 text-right text-[11px] font-bold text-red-600">
+                      {tx.expense > 0 ? formatCurrency(tx.expense) : '-'}
+                    </td>
+                    <td className="px-4 py-3 text-right text-[11px] font-black text-slate-900 bg-slate-50/50">
+                      {formatCurrency(tx.accumulated ?? 0)}
+                    </td>
                   </tr>
                 ))}
+
+                {/* Rodapé de fechamento */}
+                <tr className="bg-slate-900 text-white font-black">
+                  <td className="px-4 py-4 text-[11px] uppercase" colSpan={3}>Fechamento do Período Atual</td>
+                  <td className="px-4 py-4 text-right text-[11px] text-emerald-400">{formatCurrency(stats.totalIncome ?? 0)}</td>
+                  <td className="px-4 py-4 text-right text-[11px] text-red-400">{formatCurrency(stats.totalExpenses ?? 0)}</td>
+                  <td className="px-4 py-4 text-right text-[12px] text-white underline decoration-2 decoration-emerald-500 underline-offset-4">{formatCurrency(stats.fundBalances?.GERAL ?? 0)}</td>
+                </tr>
               </tbody>
             </table>
           </div>
-          <p className="mt-4 text-[10px] text-slate-400 italic">
-            * As colunas de Emergência e Reserva mostram o saldo total acumulado atual para referência. 
-            O histórico diário detalhado é calculado em tempo real a partir do livro de caixa.
+          <p className="mt-4 text-[9px] text-slate-400 italic uppercase font-medium">
+            * Este relatório lista cada movimentação individual para total transparência e auditoria. 
+            O Saldo Acumulado reflete o Fundo Geral da igreja após cada operação.
           </p>
         </div>
       </div>
