@@ -205,10 +205,10 @@ const App: React.FC = () => {
           totalIncome += tx.amount;
           let valor = tx.amount;
           
-          // 10% para emergência APENAS se for DIZIMO (ofertas/dízimos)
+          // 10% para emergência se for DIZIMO ou OUTROS (carregamentos iniciais)
           let paraEmergencia = 0;
-          if (tx.category === 'DIZIMO') {
-            paraEmergencia = tx.amount * PERCENT_EMERGENCIA;  // 10% apenas de DIZIMO
+          if (tx.category === 'DIZIMO' || tx.category === 'OUTROS') {
+            paraEmergencia = tx.amount * PERCENT_EMERGENCIA;  // 10% de DIZIMO ou OUTROS
             saldoEmergencia += paraEmergencia;
             valor -= paraEmergencia;
             
@@ -222,10 +222,10 @@ const App: React.FC = () => {
             });
           }
           
-          // 10% para Água/Luz/TV APENAS se for DIZIMO
+          // 10% para Água/Luz/TV se for DIZIMO ou OUTROS
           let paraUtilidades = 0;
-          if (tx.category === 'DIZIMO') {
-            paraUtilidades = tx.amount * PERCENT_UTILIDADES;  // 10% apenas de DIZIMO
+          if (tx.category === 'DIZIMO' || tx.category === 'OUTROS') {
+            paraUtilidades = tx.amount * PERCENT_UTILIDADES;  // 10% de DIZIMO ou OUTROS
             saldoUtilidades += paraUtilidades;
             valor -= paraUtilidades;
           }
