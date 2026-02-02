@@ -264,6 +264,10 @@ const App: React.FC = () => {
             saldoEmergencia = 0;
             saldoGeral -= falta;
           }
+        } else if (tx.category === 'ALOCACAO_RENDA') {
+          // Alocação manual de saldo para completar renda - sai de Geral, vai para Renda
+          saldoGeral -= tx.amount;
+          saldoRenda += tx.amount;
         } else {
           // Outras despesas (incluindo MANUTENCAO) - sai do Saldo Disponível
           totalExpenses += tx.amount;
@@ -477,13 +481,13 @@ const App: React.FC = () => {
       date: new Date().toISOString(),
       description: 'Alocação Manual - Completar Reserva de Renda',
       amount: valorTransferir,
-      type: 'INCOME',
-      category: 'DIZIMO',
+      type: 'EXPENSE',
+      category: 'ALOCACAO_RENDA' as any,
       fundAllocations: {
         ALUGUER: valorTransferir,
         EMERGENCIA: 0,
         UTILIDADES: 0,
-        GERAL: 0,
+        GERAL: -valorTransferir,
         INFANTIL: 0,
       }
     };
