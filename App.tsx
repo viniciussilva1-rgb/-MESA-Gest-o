@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { User } from 'firebase/auth';
 import { Transaction, FinancialStats, FundType, SystemConfig, ReportHistory } from './types';
@@ -16,7 +15,10 @@ import {
   saveConfig,
   migrateFromLocalStorage,
   saveReportHistory,
-  subscribeToReportsHistory
+  subscribeToReportsHistory,
+  subscribeTreasurySummary,
+  incrementEmergencyBalance,
+  TreasurySummary
 } from './services/firestoreService';
 import { subscribeToAuthState, logout } from './services/authService';
 import { exportToExcel } from './services/exportService';
@@ -39,6 +41,7 @@ const App: React.FC = () => {
   
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [reportsHistory, setReportsHistory] = useState<ReportHistory[]>([]);
+  const [treasurySummary, setTreasurySummary] = useState<TreasurySummary>({ emergencyBalance: 280.11, updatedAt: new Date().toISOString() });
 
   const defaultConfig: SystemConfig = {
     churchName: 'Igreja  À MESA',
@@ -145,6 +148,16 @@ const App: React.FC = () => {
     return () => unsubscribe();
   }, [user]);
 
+  // Escutar treasury summary do Firebase (saldo de emergência persistido)
+  useEffect(() => {
+    if (!user) return;
+    
+    const unsubscribe = subscribeTreasurySummary((summary) => {
+      setTreasurySummary(summary);
+    });
+    return () => unsubscribe();
+  }, [user]);
+
   // Salvar configurações automaticamente quando mudam (após carregamento inicial)
   useEffect(() => {
     if (!user || !configLoaded) return;
@@ -171,14 +184,13 @@ const App: React.FC = () => {
     
     // Saldos dos fundos - calculados automaticamente
     let saldoRenda = 0;
-    // Saldo de emergência calculado APENAS a partir das transações (10% de DIZIMO e OUTROS)
-    let saldoEmergencia = 0;
+    // Saldo de emergência vem do Treasury Summary (persistido no Firebase)
+    let saldoEmergencia = treasurySummary.emergencyBalance;
     let saldoUtilidades = 0; // Água, Luz, TV
     let saldoGeral = 0; // Saldo Disponível
     let saldoInfantil = 0;
     
     const META_RENDA = config.rentTarget; // €1350
-    const PERCENT_EMERGENCIA = 0.10; // 10%
     const PERCENT_UTILIDADES = 0.10; // 10% para Água/Luz/TV
     
     // Ordenar por data para processar na ordem correta
@@ -201,14 +213,6 @@ const App: React.FC = () => {
           // Entrada normal da igreja
           totalIncome += tx.amount;
           let valor = tx.amount;
-          
-          // 10% para emergência se for DIZIMO ou OUTROS (carregamentos iniciais)
-          let paraEmergencia = 0;
-          if (tx.category === 'DIZIMO' || tx.category === 'OUTROS') {
-            paraEmergencia = tx.amount * PERCENT_EMERGENCIA;  // 10% de DIZIMO ou OUTROS
-            saldoEmergencia += paraEmergencia;
-            valor -= paraEmergencia;
-          }
           
           // 10% para Água/Luz/TV se for DIZIMO ou OUTROS
           let paraUtilidades = 0;
@@ -295,7 +299,7 @@ const App: React.FC = () => {
       infantilIncome,
       infantilExpenses
     };
-  }, [transactions, config.rentTarget]);
+  }, [transactions, config.rentTarget, treasurySummary]);
 
   const chartHistory = useMemo(() => {
     const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun'];
@@ -357,6 +361,17 @@ const App: React.FC = () => {
     try {
       await addTransactionToFirestore(tx);
       console.log('Transação salva com sucesso!');
+      
+      // Se for DIZIMO ou OFERTA, incrementar saldo de emergência com 10%
+      if ((tx.category === 'DIZIMO' || tx.category === 'OFERTA') && tx.type === 'INCOME') {
+        const emergencyIncrement = tx.amount * 0.10;
+        try {
+          await incrementEmergencyBalance(emergencyIncrement);
+          console.log(`Saldo de emergência incrementado em €${emergencyIncrement.toFixed(2)}`);
+        } catch (error) {
+          console.error('Erro ao incrementar emergência:', error);
+        }
+      }
     } catch (error: any) {
       console.error('Erro completo:', error);
       console.error('Código do erro:', error?.code);
