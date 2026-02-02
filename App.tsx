@@ -186,12 +186,11 @@ const App: React.FC = () => {
     let saldoRenda = 0;
     // Saldo de emergência vem do Treasury Summary (persistido no Firebase)
     let saldoEmergencia = treasurySummary.emergencyBalance;
-    let saldoUtilidades = 0; // Água, Luz, TV
-    let saldoGeral = 0; // Saldo Disponível
+    let saldoUtilidades = 0; // Reservado (não afeta saldo disponível)
+    let saldoGeral = 0; // Saldo Disponível - dinheiro efetivamente livre
     let saldoInfantil = 0;
     
     const META_RENDA = config.rentTarget; // €1350
-    const PERCENT_UTILIDADES = 0.10; // 10% para Água/Luz/TV
     
     // Ordenar por data para processar na ordem correta
     const transacoesOrdenadas = [...transactions]
@@ -214,13 +213,9 @@ const App: React.FC = () => {
           totalIncome += tx.amount;
           let valor = tx.amount;
           
-          // 10% para Água/Luz/TV se for DIZIMO ou OUTROS
-          let paraUtilidades = 0;
-          if (tx.category === 'DIZIMO' || tx.category === 'OUTROS') {
-            paraUtilidades = tx.amount * PERCENT_UTILIDADES;  // 10% de DIZIMO ou OUTROS
-            saldoUtilidades += paraUtilidades;
-            valor -= paraUtilidades;
-          }
+          // NÃO descontar para utilidades aqui
+          // A emergência (10%) é persistida no Firebase (não descontar)
+          // Apenas destribuir: Renda + Saldo Disponível
           
           // 1º Preencher reserva de renda até a meta
           const faltaRenda = Math.max(0, META_RENDA - saldoRenda);
@@ -230,7 +225,7 @@ const App: React.FC = () => {
             valor -= paraRenda;
           }
           
-          // 4º Resto vai para Saldo Disponível (Geral)
+          // 2º Resto vai para Saldo Disponível (Geral) - este é o dinheiro efetivamente livre
           if (valor > 0) {
             saldoGeral += valor;
           }
