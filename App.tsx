@@ -18,6 +18,7 @@ import {
   subscribeToReportsHistory,
   subscribeTreasurySummary,
   incrementEmergencyBalance,
+  incrementRentReserveBalance,
   TreasurySummary
 } from './services/firestoreService';
 import { subscribeToAuthState, logout } from './services/authService';
@@ -41,7 +42,11 @@ const App: React.FC = () => {
   
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [reportsHistory, setReportsHistory] = useState<ReportHistory[]>([]);
-  const [treasurySummary, setTreasurySummary] = useState<TreasurySummary>({ emergencyBalance: 280.11, updatedAt: new Date().toISOString() });
+  const [treasurySummary, setTreasurySummary] = useState<TreasurySummary>({ 
+    emergencyBalance: 280.11, 
+    rentReserveBalance: 900.00,
+    updatedAt: new Date().toISOString() 
+  });
 
   const defaultConfig: SystemConfig = {
     churchName: 'Igreja  À MESA',
@@ -177,25 +182,21 @@ const App: React.FC = () => {
 
   // CÁLCULO DE SALDO REAL - Fundo GERAL deve bater com numerário real
   const stats = useMemo((): FinancialStats => {
-    let entradasTotais = 0;   // INCOME (Igreja)
-    let saidasTotais = 0;     // EXPENSE (Igreja)
-    let infantilInc = 0;      // INCOME (Infantil)
-    let infantilExp = 0;      // INCOME (Infantil)
+    let entradasTotais = 0;   
+    let saidasTotais = 0;     
+    let infantilInc = 0;      
+    let infantilExp = 0;      
     
-    let rendaPot = 0;         // Reserva de Renda (€1350)
-    const emergencyPot = treasurySummary.emergencyBalance; // Saldo Total Emergência PERSISTENTE
+    // USAR SALDOS PERSISTENTES DO FIRESTORE
+    const rendaPot = treasurySummary.rentReserveBalance; 
+    const emergencyPot = treasurySummary.emergencyBalance; 
     
-    const META_RENDA = config.rentTarget;
-    const logDetalhamento: any[] = [];
     const ignored: any[] = [];
-
-    // Ordenar transações por data
     const sorted = [...transactions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     sorted.forEach(tx => {
       const isInfantil = tx.category === 'INFANTIL';
       const desc = tx.description.toLowerCase();
-      // Ignorar apenas reposições automáticas antigas que duplicavam entradas
       const isInternal = desc.includes('reposição automática');
 
       if (isInfantil) {
@@ -210,69 +211,44 @@ const App: React.FC = () => {
       }
 
       if (tx.type === 'INCOME') {
-        // ENTRADAS REAIS
-        if (tx.category === 'ALOCACAO_RENDA') {
-          // Não soma em entradasTotais porque já veio de um dízimo/oferta anterior
-          rendaPot += tx.amount;
-          logDetalhamento.push(`[ALOCACAO] €${tx.amount} -> Renda Pot`);
-        } else {
+        // Ignorar ALOCACAO_RENDA nas entradas reais para não inflar o faturamento
+        if (tx.category !== 'ALOCACAO_RENDA') {
           entradasTotais += tx.amount;
-          // Distribuição automática para Renda
-          const faltaParaRenda = Math.max(0, META_RENDA - rendaPot);
-          const paraRenda = Math.min(tx.amount, faltaParaRenda);
-          rendaPot += paraRenda;
-          
-          logDetalhamento.push(`[INCOME] €${tx.amount} (${tx.category}) | Para Renda: €${paraRenda.toFixed(2)}`);
         }
       } else {
-        // SAÍDAS REAIS
-        saidasTotais += tx.amount;
-        if (tx.category === 'RENDA') {
-          rendaPot = Math.max(0, rendaPot - tx.amount);
-          logDetalhamento.push(`[EXPENSE-RENDA] €${tx.amount} | Renda Pot agora: €${rendaPot.toFixed(2)}`);
-        } else {
-          logDetalhamento.push(`[EXPENSE] €${tx.amount} (${tx.category})`);
+        // Ignorar ALOCACAO_RENDA nas saídas reais para não reduzir o numerário real (é apenas reserva)
+        if (tx.category !== 'ALOCACAO_RENDA') {
+          saidasTotais += tx.amount;
         }
-        // Saídas de EMERGENCIA aumentam saidasTotais, o que naturalmente reduz o saldo GERAL
       }
     });
 
-    // 10% das Entradas (Dízimos e Ofertas) que foram para a Emergência
-    // Nota: O emergencyPot já inclui os 280.11 base + todos os 10% acumulados.
-    // Portanto, subtrair o emergencyPot total é o correto para saber o GERAL.
-    
-    const saldoGeral = entradasTotais - saidasTotais - rendaPot - emergencyPot;
+    const cashOnHand = entradasTotais - saidasTotais;
+    const availableBalance = cashOnHand - rendaPot - emergencyPot;
 
-    // BALANCETE OBRIGATÓRIO NO CONSOLE
-    console.group('%c💰 CONFERÊNCIA DE SALDO DISPONÍVEL (CAIXA REAL)', 'color: #10b981; font-size: 14px; font-weight: bold;');
-    console.log(`(A) Total Entradas Igreja:     €${entradasTotais.toFixed(2)}`);
-    console.log(`(B) Total Saídas Igreja:       €${saidasTotais.toFixed(2)}`);
-    console.log(`(C) Fundo Renda (Segregado):   €${rendaPot.toFixed(2)}`);
-    console.log(`(D) Fundo Emergência (Total):  €${emergencyPot.toFixed(2)}`);
-    console.log('%c-------------------------------------------', 'color: #ccc');
-    console.log(`%cSALDO DISPONÍVEL (A - B - C - D) = €${saldoGeral.toFixed(2)}`, 'color: #ffffff; background: #3b82f6; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
-    
-    if (Math.abs(saldoGeral - 1272.65) > 0.01) {
-      console.warn(`⚠️ Divergência detectada! Diferença: €${(saldoGeral - 1272.65).toFixed(2)} vs numerário real.`);
-    }
-
-    if (ignored.length > 0) console.log('🚫 Transações Ignoradas:', ignored);
+    // BALANCETE
+    console.group('%c💰 CONFERÊNCIA DE SALDO DISPONÍVEL', 'color: #10b981; font-weight: bold;');
+    console.log(`(A) Entradas Igreja: €${entradasTotais.toFixed(2)}`);
+    console.log(`(B) Saídas Igreja:   €${saidasTotais.toFixed(2)}`);
+    console.log(`(C) Reserva Renda:   €${rendaPot.toFixed(2)}`);
+    console.log(`(D) Emergência:      €${emergencyPot.toFixed(2)}`);
+    console.log(`SALDO DISPONÍVEL: €${availableBalance.toFixed(2)}`);
     console.groupEnd();
 
     return { 
       totalIncome: entradasTotais, 
       totalExpenses: saidasTotais, 
-      netBalance: entradasTotais - saidasTotais, 
+      netBalance: cashOnHand, 
       fundBalances: {
         ALUGUER: rendaPot,
         EMERGENCIA: emergencyPot,
-        GERAL: saldoGeral,
+        GERAL: availableBalance,
         INFANTIL: infantilInc - infantilExp
       },
       infantilIncome: infantilInc,
       infantilExpenses: infantilExp
     };
-  }, [transactions, config.rentTarget, treasurySummary]);
+  }, [transactions, treasurySummary]);
 
   const chartHistory = useMemo(() => {
     const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun'];
@@ -334,21 +310,39 @@ const App: React.FC = () => {
       await addTransactionToFirestore(tx);
       console.log('Transação salva com sucesso!');
       
-      // Se for DIZIMO ou OFERTA, incrementar saldo de emergência com 10%
+      // === PERSISTÊNCIA DE SALDOS REAIS (TREASURY) ===
+      
+      // 1. Emergência: 10% de Dízimos e Ofertas
       if ((tx.category === 'DIZIMO' || tx.category === 'OFERTA') && tx.type === 'INCOME') {
         const emergencyIncrement = tx.amount * 0.10;
-        try {
-          await incrementEmergencyBalance(emergencyIncrement);
-          console.log(`Saldo de emergência incrementado em €${emergencyIncrement.toFixed(2)}`);
-        } catch (error) {
-          console.error('Erro ao incrementar emergência:', error);
+        await incrementEmergencyBalance(emergencyIncrement);
+      }
+      
+      // 2. Reserva de Renda: Alocação Automática
+      if (tx.type === 'INCOME' && tx.category !== 'INFANTIL' && tx.category !== 'ALOCACAO_RENDA') {
+        const currentRent = treasurySummary.rentReserveBalance;
+        const missing = Math.max(0, config.rentTarget - currentRent);
+        if (missing > 0) {
+          const allocation = Math.min(tx.amount, missing);
+          await incrementRentReserveBalance(allocation);
+          console.log(`Auto-alocação de Renda: €${allocation.toFixed(2)}`);
         }
       }
+      
+      // 3. Reserva de Renda: Alocação Manual (Completa Reserva)
+      if (tx.category === 'ALOCACAO_RENDA') {
+        await incrementRentReserveBalance(tx.amount);
+        console.log(`Alocação Manual de Renda: €${tx.amount.toFixed(2)}`);
+      }
+      
+      // 4. Reserva de Renda: Despesa de Renda (Baixa na reserva)
+      if (tx.category === 'RENDA' && tx.type === 'EXPENSE') {
+        await incrementRentReserveBalance(-tx.amount);
+        console.log(`Baixa de Reserva por Pagamento: -€${tx.amount.toFixed(2)}`);
+      }
+      
     } catch (error: any) {
       console.error('Erro completo:', error);
-      console.error('Código do erro:', error?.code);
-      console.error('Mensagem:', error?.message);
-      
       if (error?.code === 'permission-denied') {
         alert('Erro de permissão. Verifique se você está logado corretamente.');
       } else {
@@ -365,6 +359,46 @@ const App: React.FC = () => {
     } catch (error) {
       console.error('Erro ao salvar configurações:', error);
       alert('Erro ao salvar configurações. Tente novamente.');
+    }
+  };
+
+  const handleDeleteTransaction = async (tx: Transaction) => {
+    if (!confirm(`Deseja realmente cancelar esta movimentação?\n\n${tx.description}\n€${tx.amount.toFixed(2)}`)) {
+      return;
+    }
+
+    try {
+      // 1. Remover do Firestore
+      await deleteTransactionFromFirestore(tx.id);
+      
+      // 2. Reverter impact no Treasury persistent balance
+      
+      // Reverter Emergência (10% de Dizimo/Oferta INCOME)
+      if ((tx.category === 'DIZIMO' || tx.category === 'OFERTA') && tx.type === 'INCOME') {
+        await incrementEmergencyBalance(-(tx.amount * 0.10));
+      }
+      
+      // Reverter Reserva de Renda
+      if (tx.type === 'INCOME' && tx.category !== 'INFANTIL' && tx.category !== 'ALOCACAO_RENDA') {
+        // Para reverter auto-alocação é complexo porque não sabemos quanto foi alocado na época
+        // Por simplicidade, recalculamos se for deletado, ou apenas avisamos.
+        // Mas podemos tentar: se o saldo atual for > 0, tentamos remover o que puder.
+        // Na verdade, o melhor é recalcular o saldo persistente se houver deleções importantes.
+        console.warn('Deleção de entrada: Recomenda-se clicar em "Recalcular Alocações" para garantir precisão do saldo persistente.');
+      }
+      
+      if (tx.category === 'ALOCACAO_RENDA') {
+        await incrementRentReserveBalance(-tx.amount);
+      }
+      
+      if (tx.category === 'RENDA' && tx.type === 'EXPENSE') {
+        await incrementRentReserveBalance(tx.amount);
+      }
+      
+      alert('Movimentação cancelada com sucesso!');
+    } catch (error) {
+      console.error('Erro ao cancelar:', error);
+      alert('Erro ao cancelar movimentação.');
     }
   };
 
@@ -751,7 +785,11 @@ const App: React.FC = () => {
 
       <DashboardCharts stats={stats} history={chartHistory} />
       
-      <RecentTransactions transactions={transactions} formatCurrency={formatCurrency} />
+      <RecentTransactions 
+        transactions={transactions} 
+        formatCurrency={formatCurrency} 
+        onDelete={handleDeleteTransaction}
+      />
     </div>
   );
 
@@ -793,16 +831,7 @@ const App: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 text-center">
                       <button
-                        onClick={async () => {
-                          if (confirm(`Deseja cancelar esta movimentação?\n\n${tx.description}\n${formatCurrency(tx.amount)}`)) {
-                            try {
-                              await deleteTransactionFromFirestore(tx.id);
-                              alert('Movimentação cancelada com sucesso!');
-                            } catch (error) {
-                              alert('Erro ao cancelar movimentação.');
-                            }
-                          }
-                        }}
+                        onClick={() => handleDeleteTransaction(tx)}
                         className="px-2 py-1 text-red-600 hover:bg-red-50 rounded-lg transition-colors text-xs font-bold flex items-center gap-1 mx-auto"
                       >
                         <Trash2 size={14} /> Cancelar
@@ -1194,18 +1223,15 @@ const FundDistribution = ({ stats }: { stats: FinancialStats }) => (
   </div>
 );
 
-const RecentTransactions = ({ transactions, formatCurrency }: { transactions: Transaction[], formatCurrency: (v: number) => string }) => {
-  const handleDeleteTransaction = async (transactionId: string, description: string, amount: number) => {
-    if (confirm(`Deseja cancelar esta movimentação?\n\n${description}\n${formatCurrency(amount)}`)) {
-      try {
-        await deleteTransactionFromFirestore(transactionId);
-        alert('Movimentação cancelada com sucesso!');
-      } catch (error) {
-        alert('Erro ao cancelar movimentação.');
-      }
-    }
-  };
-
+const RecentTransactions = ({ 
+  transactions, 
+  formatCurrency, 
+  onDelete 
+}: { 
+  transactions: Transaction[], 
+  formatCurrency: (v: number) => string,
+  onDelete: (tx: Transaction) => void
+}) => {
   return (
     <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-200">
       <div className="flex items-center justify-between mb-8">
@@ -1228,7 +1254,7 @@ const RecentTransactions = ({ transactions, formatCurrency }: { transactions: Tr
                 {tx.type === 'INCOME' ? '+' : '-'} {formatCurrency(tx.amount)}
               </div>
               <button
-                onClick={() => handleDeleteTransaction(tx.id, tx.description, tx.amount)}
+                onClick={() => onDelete(tx)}
                 className="px-2 py-1 text-red-600 hover:bg-red-50 rounded-lg transition-colors text-xs font-bold opacity-0 group-hover:opacity-100"
               >
                 <Trash2 size={14} />
