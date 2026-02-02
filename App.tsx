@@ -995,26 +995,6 @@ const App: React.FC = () => {
             <p className="text-xs text-slate-500 mt-1">Meta automática: 3x €{config.rentAmount} = €{config.rentTarget}</p>
           </div>
 
-          <div className="p-6 bg-red-50 rounded-2xl border border-red-100 space-y-4">
-            <h4 className="text-sm font-black text-red-900 uppercase tracking-widest flex items-center gap-2">
-              <Landmark size={18} /> Fundo de Emergência
-            </h4>
-            <div>
-              <label className="block text-xs font-black text-slate-500 uppercase mb-2">Saldo Inicial (€)</label>
-              <input 
-                type="number" 
-                step="0.01"
-                value={config.emergencyInitialBalance || 0}
-                onChange={(e) => setConfig({...config, emergencyInitialBalance: parseFloat(e.target.value) || 0})}
-                className="w-full px-4 py-3 bg-white border border-red-200 rounded-xl focus:ring-2 focus:ring-red-500 outline-none font-black text-red-600" 
-              />
-              <p className="text-xs text-slate-500 mt-2">
-                Este valor é atualizado automaticamente quando você salva um relatório no histórico.
-                <br />O fundo de emergência só diminui quando você usa a categoria "Usar Fundo de Emergência" nas saídas.
-              </p>
-            </div>
-          </div>
-
           <div className="p-6 bg-emerald-50 rounded-2xl border border-emerald-100 space-y-4">
             <h4 className="text-sm font-black text-emerald-900 uppercase tracking-widest flex items-center gap-2"><Database size={18} /> Backup dos Dados</h4>
             <div className="space-y-3 text-sm text-emerald-700 font-medium">
