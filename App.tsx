@@ -701,7 +701,7 @@ const App: React.FC = () => {
       </div>
 
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-        <SummaryCard icon={<Wallet size={24} />} title="Saldo Disponível" value={formatCurrency(stats.fundBalances.UTILIDADES + stats.fundBalances.GERAL)} color="blue" />
+        <SummaryCard icon={<Wallet size={24} />} title="Saldo Disponível" value={formatCurrency(stats.fundBalances.GERAL)} color="blue" />
         <SummaryCard icon={<TrendingUp size={24} />} title="Entradas Igreja" value={formatCurrency(stats.totalIncome)} color="emerald" />
         <SummaryCard icon={<Landmark size={24} />} title="Emergência" value={formatCurrency(stats.fundBalances.EMERGENCIA)} color="red" />
         
@@ -891,7 +891,7 @@ const App: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
           <ReportStat label="Total Entradas" value={formatCurrency(stats.totalIncome)} />
           <ReportStat label="Total Saídas" value={formatCurrency(stats.totalExpenses)} />
-          <ReportStat label="Saldo Disponível" value={formatCurrency(stats.fundBalances.UTILIDADES + stats.fundBalances.GERAL)} highlight />
+          <ReportStat label="Saldo Disponível" value={formatCurrency(stats.fundBalances.GERAL)} highlight />
           <ReportStat label="Saldo Total (Entradas - Saídas)" value={formatCurrency(stats.totalIncome - stats.totalExpenses)} />
         </div>
 
