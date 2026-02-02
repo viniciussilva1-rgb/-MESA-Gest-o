@@ -13,10 +13,12 @@ export interface SystemConfig {
 export interface ReportHistory {
   id?: string;
   date: string; // Data de emissão do relatório
-  totalIncome: number;
-  totalExpenses: number;
-  netBalance: number;
-  fundBalances: Record<FundType, number>;
+  openingBalance: number; // Saldo inicial do período (GERAL)
+  totalIncome: number; // Entradas do período
+  totalExpenses: number; // Saídas do período
+  netBalance: number; // Total em Caixa (Geral + Reservas)
+  closingBalance: number; // Saldo final do período (GERAL)
+  fundBalances: Record<FundType, number>; // Saldos finais de todos os fundos
   infantilIncome: number;
   infantilExpenses: number;
   generatedBy?: string; // Email do usuário que gerou
@@ -46,6 +48,7 @@ export interface Transaction {
 }
 
 export interface FinancialStats {
+  openingBalance: number; // Novo: Adicionado para conceito de relatório fechado
   totalIncome: number;
   totalExpenses: number;
   netBalance: number;

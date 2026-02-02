@@ -182,17 +182,27 @@ const App: React.FC = () => {
 
   // CÁLCULO DE SALDO REAL - Fundo GERAL deve bater com numerário real
   const stats = useMemo((): FinancialStats => {
+    // 1. Identificar o último relatório fechado
+    const lastReport = reportsHistory.length > 0 
+      ? [...reportsHistory].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
+      : null;
+
     let entradasTotais = 0;   
     let saidasTotais = 0;     
     let infantilInc = 0;      
     let infantilExp = 0;      
     
-    // USAR SALDOS PERSISTENTES DO FIRESTORE
-    const rendaPot = treasurySummary.rentReserveBalance; 
-    const emergencyPot = treasurySummary.emergencyBalance; 
+    // USAR SALDOS PERSISTENTES DO FIRESTORE (Sempre mostram o total atual)
+    const currentRentTotal = treasurySummary.rentReserveBalance; 
+    const currentEmergencyTotal = treasurySummary.emergencyBalance; 
     
+    // Filtrar transações APÓS o último relatório
+    const filteredTransactions = lastReport 
+      ? transactions.filter(tx => new Date(tx.date).getTime() > new Date(lastReport.date).getTime())
+      : transactions;
+
     const ignored: any[] = [];
-    const sorted = [...transactions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    const sorted = [...filteredTransactions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     sorted.forEach(tx => {
       const isInfantil = tx.category === 'INFANTIL';
@@ -211,24 +221,30 @@ const App: React.FC = () => {
       }
 
       if (tx.type === 'INCOME') {
-        // Ignorar ALOCACAO_RENDA nas entradas reais para não inflar o faturamento
         if (tx.category !== 'ALOCACAO_RENDA') {
           entradasTotais += tx.amount;
         }
       } else {
-        // Ignorar ALOCACAO_RENDA nas saídas reais para não reduzir o numerário real (é apenas reserva)
         if (tx.category !== 'ALOCACAO_RENDA') {
           saidasTotais += tx.amount;
         }
       }
     });
 
-    const cashOnHand = entradasTotais - saidasTotais;
-    const availableBalance = cashOnHand - rendaPot - emergencyPot;
+    // O "Saldo Disponível" agora é: Saldo Anterior + Entradas Período - Saídas Período - Ajustes de Fundo No Período
+    // Mas para simplificar e garantir precisão com o caixa físico:
+    // Saldo Disponível = (Saldo Inicial Geral) + Entradas (Igreja) - Saídas (Igreja) - (Aumento nas Reservas)
+    
+    const openingBalanceGeral = lastReport ? lastReport.closingBalance : 0;
+    
+    // Variação das reservas no período (Se houver snapshot anterior)
+    const rentDelta = lastReport ? Math.max(0, currentRentTotal - lastReport.fundBalances.ALUGUER) : currentRentTotal;
+    const emergencyDelta = lastReport ? Math.max(0, currentEmergencyTotal - lastReport.fundBalances.EMERGENCIA) : currentEmergencyTotal;
 
-    // DEFINIÇÃO DE "SAÍDAS" PARA O USUÁRIO (Inclui o que foi reservado para renda)
-    // Isso garante que Totais + Disponível = Entradas - Emergência
-    const totalOutflowParaExibicao = saidasTotais + rendaPot;
+    const availableBalance = openingBalanceGeral + entradasTotais - saidasTotais - rentDelta - emergencyDelta;
+
+    // DEFINIÇÃO DE "SAÍDAS" PARA O USUÁRIO (Inclui o que foi reservado no período)
+    const totalOutflowParaExibicao = saidasTotais + rentDelta + emergencyDelta;
 
     // --- AUDITORIA AVANÇADA PARA CAÇA DE DIVERGÊNCIA (30,73€) ---
     const targetDiff = 30.73;
@@ -284,13 +300,16 @@ const App: React.FC = () => {
     console.groupEnd();
     // -----------------------------------------------------------
 
+    const cashOnHand = availableBalance + currentRentTotal + currentEmergencyTotal + (infantilInc - infantilExp);
+
     return { 
+      openingBalance: openingBalanceGeral,
       totalIncome: entradasTotais, 
       totalExpenses: totalOutflowParaExibicao, // Usar o valor que inclui reservas para o Dashboard
       netBalance: cashOnHand, 
       fundBalances: {
-        ALUGUER: rendaPot,
-        EMERGENCIA: emergencyPot,
+        ALUGUER: currentRentTotal,
+        EMERGENCIA: currentEmergencyTotal,
         GERAL: availableBalance,
         INFANTIL: infantilInc - infantilExp
       },
@@ -298,7 +317,7 @@ const App: React.FC = () => {
       infantilExpenses: infantilExp,
       realChurchExpenses: saidasTotais // Campo extra para auditoria se necessário
     };
-  }, [transactions, treasurySummary]);
+  }, [transactions, treasurySummary, reportsHistory]);
 
   const chartHistory = useMemo(() => {
     const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun'];
@@ -460,6 +479,8 @@ const App: React.FC = () => {
     
     const report: ReportHistory = {
       date: new Date().toISOString(),
+      openingBalance: stats.openingBalance,
+      closingBalance: stats.fundBalances.GERAL,
       totalIncome: stats.totalIncome,
       totalExpenses: stats.totalExpenses,
       netBalance: stats.netBalance,
@@ -897,8 +918,16 @@ const App: React.FC = () => {
   );
 
   const renderReports = () => {
-    // Gerar resumo diário dinâmico a partir das transações reais
-    const dailyData = transactions.reduce((acc: any, tx) => {
+    const lastReport = reportsHistory.length > 0 
+      ? [...reportsHistory].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
+      : null;
+
+    // Gerar resumo diário dinâmico apenas do período atual (após último snapshot)
+    const filteredForReport = lastReport 
+      ? transactions.filter(tx => new Date(tx.date).getTime() > new Date(lastReport.date).getTime())
+      : transactions;
+
+    const dailyData = filteredForReport.reduce((acc: any, tx) => {
       const date = new Date(tx.date).toLocaleDateString('pt-PT');
       if (!acc[date]) acc[date] = { income: 0, expense: 0 };
       
@@ -966,11 +995,12 @@ const App: React.FC = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-            <ReportStat label="Total Entradas" value={formatCurrency(stats.totalIncome)} />
-            <ReportStat label="Saídas (Despesas + Reservas)" value={formatCurrency(stats.totalExpenses)} />
-            <ReportStat label="Saldo Disponível" value={formatCurrency(stats.fundBalances.GERAL)} highlight />
-            <ReportStat label="Capital em Caixa (Geral + Emerg)" value={formatCurrency(stats.totalIncome - stats.totalExpenses)} />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-12">
+            <ReportStat label="Saldo Inicial" value={formatCurrency(stats.openingBalance)} />
+            <ReportStat label="Entradas (Mês)" value={formatCurrency(stats.totalIncome)} />
+            <ReportStat label="Saídas/Reservas" value={formatCurrency(stats.totalExpenses)} />
+            <ReportStat label="Saldo Final Geral" value={formatCurrency(stats.fundBalances.GERAL)} highlight />
+            <ReportStat label="Caixa Total" value={formatCurrency(stats.netBalance)} />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
@@ -999,6 +1029,46 @@ const App: React.FC = () => {
           </div>
         </div>
 
+        {/* Histórico de Snapshots (Relatórios Fechados) */}
+        {reportsHistory.length > 0 && (
+          <div className="bg-slate-900 p-8 rounded-3xl shadow-xl border border-slate-800 text-white">
+            <h3 className="text-xl font-black mb-6 flex items-center gap-3">
+              <History size={24} className="text-emerald-400" /> Snapshots de Períodos Encerrados
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[...reportsHistory].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((report, idx) => (
+                <div key={idx} className="bg-white/5 border border-white/10 p-5 rounded-2xl hover:bg-white/10 transition-all">
+                  <div className="flex justify-between items-start mb-4">
+                    <span className="text-[10px] font-black uppercase text-emerald-400 tracking-widest">{new Date(report.date).toLocaleDateString('pt-PT', { month: 'long', year: 'numeric' })}</span>
+                    <span className="bg-emerald-500 text-[8px] font-black px-2 py-0.5 rounded text-white uppercase">Fechado</span>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-400">Saldo Inicial:</span>
+                      <span className="font-bold">{formatCurrency(report.openingBalance || 0)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-400">Entradas:</span>
+                      <span className="font-bold text-emerald-400">+{formatCurrency(report.totalIncome)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-400">Saídas:</span>
+                      <span className="font-bold text-red-400">-{formatCurrency(report.totalExpenses)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm border-t border-white/10 pt-2 mt-2">
+                      <span className="text-white font-bold">Saldo Final:</span>
+                      <span className="font-black text-white">{formatCurrency(report.closingBalance || report.fundBalances.GERAL)}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="mt-6 text-[10px] text-slate-500 italic uppercase tracking-tighter text-center">
+              * Relatórios fechados servem como ponto de partida (Saldo Inicial) para o cálculo do período subsequente.
+            </p>
+          </div>
+        )}
+
         {/* Histórico Dinâmico por Dia */}
         <div className="bg-white p-8 rounded-3xl shadow-xl border border-slate-100 print:hidden">
           <h3 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-3">
@@ -1017,9 +1087,19 @@ const App: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
+                {/* Saldo Inicial do Período */}
+                <tr className="bg-blue-50/30">
+                  <td className="px-4 py-3 text-sm font-black text-blue-800 uppercase">Saldo Inicial (Snaphot Anterior)</td>
+                  <td className="px-4 py-3 text-right text-sm text-slate-400">---</td>
+                  <td className="px-4 py-3 text-right text-sm text-slate-400">---</td>
+                  <td className="px-4 py-3 text-right text-sm font-black text-blue-800">{formatCurrency(stats.openingBalance)}</td>
+                  <td className="px-4 py-3 text-right text-sm text-slate-400 italic">--</td>
+                  <td className="px-4 py-3 text-right text-sm text-slate-400 italic">--</td>
+                </tr>
+
                 {/* Linha de Total Acumulado (Consistente com o Topo) */}
                 <tr className="bg-slate-100/50 font-black">
-                  <td className="px-4 py-3 text-sm text-slate-900 uppercase">TOTAL ACUMULADO</td>
+                  <td className="px-4 py-3 text-sm text-slate-900 uppercase">MOVIMENTAÇÃO DO PERÍODO</td>
                   <td className="px-4 py-3 text-right text-sm text-emerald-600">{formatCurrency(stats.totalIncome)}</td>
                   <td className="px-4 py-3 text-right text-sm text-red-600">{formatCurrency(stats.totalExpenses)}</td>
                   <td className="px-4 py-3 text-right text-sm text-slate-900">{formatCurrency(stats.totalIncome - stats.totalExpenses)}</td>
