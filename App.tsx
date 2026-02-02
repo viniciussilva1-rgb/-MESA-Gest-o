@@ -183,7 +183,6 @@ const App: React.FC = () => {
     // Ordenar por data para processar na ordem correta
     const transacoesOrdenadas = [...transactions]
       .filter(tx => 
-        !tx.description.toLowerCase().includes('transferência') &&
         !tx.description.toLowerCase().includes('reposição automática')
       )
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
@@ -476,7 +475,7 @@ const App: React.FC = () => {
     const transferencia: Transaction = {
       id: crypto.randomUUID(),
       date: new Date().toISOString(),
-      description: 'Transferência para completar Reserva de Renda',
+      description: 'Alocação Manual - Completar Reserva de Renda',
       amount: valorTransferir,
       type: 'INCOME',
       category: 'DIZIMO',
