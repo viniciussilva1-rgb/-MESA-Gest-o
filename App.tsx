@@ -42,7 +42,7 @@ const App: React.FC = () => {
 
   const defaultConfig: SystemConfig = {
     churchName: 'Igreja  À MESA',
-    fundPercentages: { ALUGUER: 40, EMERGENCIA: 10, UTILIDADES: 20, GERAL: 30 },
+    fundPercentages: { ALUGUER: 40, EMERGENCIA: 10, UTILIDADES: 20, GERAL: 30, INFANTIL: 0 },
     rentTarget: 1350,
     rentAmount: 450,
     sheetsUrl: '',
@@ -286,13 +286,6 @@ const App: React.FC = () => {
       GERAL: saldoGeral, // Saldo Disponível
       INFANTIL: saldoInfantil 
     };
-    
-    // DEBUG: mostrar breakdown de entradas DIZIMO
-    console.log('=== DEBUG EMERGÊNCIA ===');
-    console.log('Saldo inicial:', config.emergencyInitialBalance || 0);
-    console.log('Total DIZIMO:', debugDizimoTotal);
-    console.log('Entradas DIZIMO com 10% para emergência:');
-    debugEntradasDizimo.forEach(e => {
     
     return { 
       totalIncome, 
