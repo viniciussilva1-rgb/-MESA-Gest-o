@@ -180,10 +180,6 @@ const App: React.FC = () => {
     const PERCENT_EMERGENCIA = 0.10; // 10%
     const PERCENT_UTILIDADES = 0.10; // 10% para Água/Luz/TV
     
-    // DEBUG: rastrear entradas DIZIMO
-    let debugDizimoTotal = 0;
-    let debugEntradasDizimo: Array<{data: string; descricao: string; valor: number; emergencia: number}> = [];
-    
     // Ordenar por data para processar na ordem correta
     const transacoesOrdenadas = [...transactions]
       .filter(tx => 
@@ -211,15 +207,6 @@ const App: React.FC = () => {
             paraEmergencia = tx.amount * PERCENT_EMERGENCIA;  // 10% de DIZIMO ou OUTROS
             saldoEmergencia += paraEmergencia;
             valor -= paraEmergencia;
-            
-            // DEBUG
-            debugDizimoTotal += tx.amount;
-            debugEntradasDizimo.push({
-              data: new Date(tx.date).toLocaleDateString('pt-PT'),
-              descricao: tx.description,
-              valor: tx.amount,
-              emergencia: paraEmergencia
-            });
           }
           
           // 10% para Água/Luz/TV se for DIZIMO ou OUTROS
@@ -305,11 +292,6 @@ const App: React.FC = () => {
     console.log('Total DIZIMO:', debugDizimoTotal);
     console.log('Entradas DIZIMO com 10% para emergência:');
     debugEntradasDizimo.forEach(e => {
-      console.log(`  ${e.data} - ${e.descricao}: €${e.valor.toFixed(2)} → €${e.emergencia.toFixed(2)} para emergência`);
-    });
-    console.log('Total esperado emergência:', (config.emergencyInitialBalance || 0) + debugEntradasDizimo.reduce((acc, e) => acc + e.emergencia, 0));
-    console.log('Saldo atual emergência:', saldoEmergencia);
-    console.log('======================');
     
     return { 
       totalIncome, 
