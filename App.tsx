@@ -45,7 +45,7 @@ const App: React.FC = () => {
 
   const defaultConfig: SystemConfig = {
     churchName: 'Igreja  À MESA',
-    fundPercentages: { ALUGUER: 40, EMERGENCIA: 10, UTILIDADES: 20, GERAL: 30, INFANTIL: 0 },
+    fundPercentages: { ALUGUER: 40, EMERGENCIA: 10, GERAL: 50, INFANTIL: 0 },
     rentTarget: 1350,
     rentAmount: 450,
     sheetsUrl: '',
@@ -201,6 +201,12 @@ const App: React.FC = () => {
     transacoesOrdenadas.forEach((tx) => {
       const isInfantil = tx.category === 'INFANTIL';
       
+      // MIGRAÇÃO: Se há dados históricos com UTILIDADES, somar em GERAL
+      if (tx.fundAllocations && 'UTILIDADES' in tx.fundAllocations && tx.fundAllocations.UTILIDADES as any > 0) {
+        saldoGeral += tx.fundAllocations.UTILIDADES as any;
+        console.log(`🔄 Migração: €${(tx.fundAllocations.UTILIDADES as any).toFixed(2)} de UTILIDADES para GERAL (${tx.description})`);
+      }
+      
       if (tx.type === 'INCOME') {
         // === ENTRADAS ===
         if (isInfantil) {
@@ -211,8 +217,6 @@ const App: React.FC = () => {
           // Entrada normal da igreja
           totalIncome += tx.amount;
           let valor = tx.amount;
-          
-          // NÃO descontar para utilidades aqui
           // A emergência (10%) é persistida no Firebase (não descontar)
           // Apenas destribuir: Renda + Saldo Disponível
           
@@ -275,7 +279,6 @@ const App: React.FC = () => {
     const fundBalances: Record<FundType, number> = { 
       ALUGUER: saldoRenda, 
       EMERGENCIA: saldoEmergencia, 
-      UTILIDADES: 0, // Sempre 0 - não recebe alocação de entrada, débito vai direto para GERAL
       GERAL: saldoGeral, // Saldo Disponível
       INFANTIL: saldoInfantil 
     };
@@ -323,7 +326,6 @@ const App: React.FC = () => {
             Valor: t.amount,
             Fundo_Renda: t.fundAllocations.ALUGUER,
             Fundo_Emergencia: t.fundAllocations.EMERGENCIA,
-            Fundo_AguaLuz: t.fundAllocations.UTILIDADES,
             Fundo_Geral: t.fundAllocations.GERAL
           }))
         })
@@ -493,7 +495,6 @@ const App: React.FC = () => {
       fundAllocations: {
         ALUGUER: valorTransferir,
         EMERGENCIA: 0,
-        UTILIDADES: 0,
         GERAL: -valorTransferir,
         INFANTIL: 0,
       }
@@ -597,7 +598,7 @@ const App: React.FC = () => {
   const recalcularAlocacoes = async () => {
     if (!confirm(`RECALCULAR TODAS AS ALOCAÇÕES\n\n` +
       `Meta de Renda: €${config.rentTarget}\n` +
-      `Percentagens: Emergência ${config.fundPercentages.EMERGENCIA}%, Água/Luz ${config.fundPercentages.UTILIDADES}%, Geral ${config.fundPercentages.GERAL}%\n\n` +
+      `Percentagens: Emergência ${config.fundPercentages.EMERGENCIA}%, Geral ${config.fundPercentages.GERAL}%\n\n` +
       `Isso vai redistribuir todas as entradas corretamente.\nContinuar?`)) {
       return;
     }
@@ -636,7 +637,7 @@ const App: React.FC = () => {
 
       const val = tx.amount;
       let newAllocations: Record<FundType, number> = {
-        ALUGUER: 0, EMERGENCIA: 0, UTILIDADES: 0, GERAL: 0, INFANTIL: 0
+        ALUGUER: 0, EMERGENCIA: 0, GERAL: 0, INFANTIL: 0
       };
 
       // Verificar quanto falta para completar a meta na reserva de renda
@@ -649,17 +650,15 @@ const App: React.FC = () => {
         
         const remaining = val - rentaAllocation;
         if (remaining > 0) {
-          const totalOtherPercentages = config.fundPercentages.EMERGENCIA + config.fundPercentages.UTILIDADES + config.fundPercentages.GERAL;
+          const totalOtherPercentages = config.fundPercentages.EMERGENCIA + config.fundPercentages.GERAL;
           newAllocations.EMERGENCIA = remaining * (config.fundPercentages.EMERGENCIA / totalOtherPercentages);
-          newAllocations.UTILIDADES = remaining * (config.fundPercentages.UTILIDADES / totalOtherPercentages);
           newAllocations.GERAL = remaining * (config.fundPercentages.GERAL / totalOtherPercentages);
         }
         console.log(`ENTRADA ${tx.description}: €${val} -> Renda: €${rentaAllocation.toFixed(2)}, Outros: €${(val - rentaAllocation).toFixed(2)}`);
       } else {
         // Meta atingida - distribui tudo entre os outros fundos
-        const totalOtherPercentages = config.fundPercentages.EMERGENCIA + config.fundPercentages.UTILIDADES + config.fundPercentages.GERAL;
+        const totalOtherPercentages = config.fundPercentages.EMERGENCIA + config.fundPercentages.GERAL;
         newAllocations.EMERGENCIA = val * (config.fundPercentages.EMERGENCIA / totalOtherPercentages);
-        newAllocations.UTILIDADES = val * (config.fundPercentages.UTILIDADES / totalOtherPercentages);
         newAllocations.GERAL = val * (config.fundPercentages.GERAL / totalOtherPercentages);
         console.log(`ENTRADA ${tx.description}: €${val} -> META ATINGIDA, tudo para outros fundos`);
       }
@@ -1195,7 +1194,7 @@ const FundDistribution = ({ stats }: { stats: FinancialStats }) => (
   <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 h-full">
     <h3 className="text-sm font-bold text-slate-800 mb-6">Distribuição por Fundos</h3>
     <div className="space-y-5">
-      {Object.entries(stats.fundBalances).filter(([key]) => key !== 'GERAL' && key !== 'UTILIDADES').map(([key, balance]) => {
+      {Object.entries(stats.fundBalances).filter(([key]) => key !== 'GERAL').map(([key, balance]) => {
         const info = FUND_INFO[key as FundType];
         if (!info) return null;
         return (

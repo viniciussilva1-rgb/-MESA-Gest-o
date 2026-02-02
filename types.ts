@@ -1,5 +1,5 @@
 
-export type FundType = 'ALUGUER' | 'EMERGENCIA' | 'UTILIDADES' | 'GERAL' | 'INFANTIL';
+export type FundType = 'ALUGUER' | 'EMERGENCIA' | 'GERAL' | 'INFANTIL';
 
 export interface SystemConfig {
   churchName: string;
