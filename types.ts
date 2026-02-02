@@ -38,7 +38,7 @@ export interface Transaction {
   description: string;
   amount: number;
   type: 'INCOME' | 'EXPENSE';
-  category: 'DIZIMO' | 'OFERTA' | 'INFANTIL' | 'CONTA' | 'MANUTENCAO' | 'SOCIAL' | 'RENDA' | 'OUTROS' | 'EMERGENCIA';
+  category: 'DIZIMO' | 'OFERTA' | 'INFANTIL' | 'CONTA' | 'MANUTENCAO' | 'SOCIAL' | 'RENDA' | 'OUTROS' | 'EMERGENCIA' | 'ALOCACAO_RENDA';
   fundAllocations: Record<FundType, number>;
   cashCount?: CashCount;
   invoiceRef?: string;

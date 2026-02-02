@@ -273,8 +273,6 @@ const App: React.FC = () => {
       infantilExpenses: infantilExp
     };
   }, [transactions, config.rentTarget, treasurySummary]);
-  }, [transactions, config.rentTarget, treasurySummary]);
-  }, [transactions, config.rentTarget, treasurySummary]);
 
   const chartHistory = useMemo(() => {
     const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun'];
