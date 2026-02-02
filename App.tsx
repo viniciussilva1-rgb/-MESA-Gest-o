@@ -175,26 +175,28 @@ const App: React.FC = () => {
     }
   };
 
-  // CÁLCULO AUTOMÁTICO E SIMPLES - Baseado em Entradas - Saídas - Reservas
+  // CÁLCULO DE SALDO REAL - Fundo GERAL deve bater com numerário real
   const stats = useMemo((): FinancialStats => {
-    let entries = 0;      // Total de Entradas (Igreja)
-    let exits = 0;        // Total de Saídas (Igreja)
-    let infantilInc = 0;  // Total Entradas Infantil
-    let infantilExp = 0;  // Total Saídas Infantil
+    let entradasTotais = 0;   // INCOME (Igreja)
+    let saidasTotais = 0;     // EXPENSE (Igreja)
+    let infantilInc = 0;      // INCOME (Infantil)
+    let infantilExp = 0;      // INCOME (Infantil)
     
-    let rendaPot = 0;     // Saldo da Reserva de Renda
-    const emergencyPot = treasurySummary.emergencyBalance; // Saldo da Emergência (Persistent)
+    let rendaPot = 0;         // Reserva de Renda (€1350)
+    const emergencyPot = treasurySummary.emergencyBalance; // Saldo Total Emergência PERSISTENTE
     
     const META_RENDA = config.rentTarget;
+    const logDetalhamento: any[] = [];
     const ignored: any[] = [];
-    
-    // Processar transações em ordem cronológica para rastrear pote de renda
+
+    // Ordenar transações por data
     const sorted = [...transactions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    
+
     sorted.forEach(tx => {
       const isInfantil = tx.category === 'INFANTIL';
       const desc = tx.description.toLowerCase();
-      const isInternal = desc.includes('reposição automática') || desc.includes('transferência');
+      // Ignorar apenas reposições automáticas antigas que duplicavam entradas
+      const isInternal = desc.includes('reposição automática');
 
       if (isInfantil) {
         if (tx.type === 'INCOME') infantilInc += tx.amount;
@@ -203,56 +205,64 @@ const App: React.FC = () => {
       }
 
       if (isInternal) {
-        ignored.push({ data: tx.date, desc: tx.description, valor: tx.amount, motivo: 'Movimentação Interna' });
+        ignored.push({ data: tx.date, desc: tx.description, valor: tx.amount, motivo: 'Sistema Antigo' });
         return;
       }
 
       if (tx.type === 'INCOME') {
+        // ENTRADAS REAIS
         if (tx.category === 'ALOCACAO_RENDA') {
+          // Não soma em entradasTotais porque já veio de um dízimo/oferta anterior
           rendaPot += tx.amount;
-          ignored.push({ data: tx.date, desc: tx.description, valor: tx.amount, motivo: 'Alocação Manual para Renda' });
+          logDetalhamento.push(`[ALOCACAO] €${tx.amount} -> Renda Pot`);
         } else {
-          entries += tx.amount;
-          // Alimentar pote de renda até a meta
-          const falta = Math.max(0, META_RENDA - rendaPot);
-          rendaPot += Math.min(tx.amount, falta);
+          entradasTotais += tx.amount;
+          // Distribuição automática para Renda
+          const faltaParaRenda = Math.max(0, META_RENDA - rendaPot);
+          const paraRenda = Math.min(tx.amount, faltaParaRenda);
+          rendaPot += paraRenda;
+          
+          logDetalhamento.push(`[INCOME] €${tx.amount} (${tx.category}) | Para Renda: €${paraRenda.toFixed(2)}`);
         }
       } else {
-        exits += tx.amount;
+        // SAÍDAS REAIS
+        saidasTotais += tx.amount;
         if (tx.category === 'RENDA') {
           rendaPot = Math.max(0, rendaPot - tx.amount);
+          logDetalhamento.push(`[EXPENSE-RENDA] €${tx.amount} | Renda Pot agora: €${rendaPot.toFixed(2)}`);
+        } else {
+          logDetalhamento.push(`[EXPENSE] €${tx.amount} (${tx.category})`);
         }
-        // Saídas de EMERGENCIA não afetam rendaPot, mas aumentam exits (o que reduz o GERAL no cálculo final)
+        // Saídas de EMERGENCIA aumentam saidasTotais, o que naturalmente reduz o saldo GERAL
       }
     });
 
-    // CÁLCULO FINAL DO SALDO DISPONÍVEL (GERAL)
-    // Disponível = (Tudo que entrou) - (Tudo que saiu) - (O que está preso na Renda) - (O que está preso na Emergência)
-    const saldoGeral = entries - exits - rendaPot - emergencyPot;
-
-    // BALANCETE PARA O CONSOLE (Debug solicitado pelo usuário)
-    console.group('%c📊 BALANCETE DE VERIFICAÇÃO', 'color: #3b82f6; font-size: 14px; font-weight: bold;');
-    console.log(`(A) Entradas Igreja: €${entries.toFixed(2)}`);
-    console.log(`(B) Saídas Igreja:   €${exits.toFixed(2)}`);
-    console.log(`(C) Reserva Renda:   €${rendaPot.toFixed(2)}`);
-    console.log(`(D) Emergência (P):  €${emergencyPot.toFixed(2)}`);
-    console.log('%c---------------------------------------', 'color: #ccc');
-    console.log(`%cSALDO_CALCULADO = A - B - C - D`, 'font-weight: bold');
-    console.log(`%c€${calculadoAFixed(entries, exits, rendaPot, emergencyPot)} = ${entries.toFixed(2)} - ${exits.toFixed(2)} - ${rendaPot.toFixed(2)} - ${emergencyPot.toFixed(2)}`, 'color: #10b981; font-weight: bold; font-size: 12px;');
+    // 10% das Entradas (Dízimos e Ofertas) que foram para a Emergência
+    // Nota: O emergencyPot já inclui os 280.11 base + todos os 10% acumulados.
+    // Portanto, subtrair o emergencyPot total é o correto para saber o GERAL.
     
-    if (ignored.length > 0) {
-      console.log('🚫 Transações Ignoradas no Cálculo Global:', ignored);
+    const saldoGeral = entradasTotais - saidasTotais - rendaPot - emergencyPot;
+
+    // BALANCETE OBRIGATÓRIO NO CONSOLE
+    console.group('%c💰 CONFERÊNCIA DE SALDO DISPONÍVEL (CAIXA REAL)', 'color: #10b981; font-size: 14px; font-weight: bold;');
+    console.log(`(A) Total Entradas Igreja:     €${entradasTotais.toFixed(2)}`);
+    console.log(`(B) Total Saídas Igreja:       €${saidasTotais.toFixed(2)}`);
+    console.log(`(C) Fundo Renda (Segregado):   €${rendaPot.toFixed(2)}`);
+    console.log(`(D) Fundo Emergência (Total):  €${emergencyPot.toFixed(2)}`);
+    console.log('%c-------------------------------------------', 'color: #ccc');
+    console.log(`%cSALDO DISPONÍVEL (A - B - C - D) = €${saldoGeral.toFixed(2)}`, 'color: #ffffff; background: #3b82f6; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
+    
+    if (Math.abs(saldoGeral - 1272.65) > 0.01) {
+      console.warn(`⚠️ Divergência detectada! Diferença: €${(saldoGeral - 1272.65).toFixed(2)} vs numerário real.`);
     }
+
+    if (ignored.length > 0) console.log('🚫 Transações Ignoradas:', ignored);
     console.groupEnd();
 
-    function calculadoAFixed(a: number, b: number, c: number, d: number) {
-      return (a - b - c - d).toFixed(2);
-    }
-
     return { 
-      totalIncome: entries, 
-      totalExpenses: exits, 
-      netBalance: entries - exits, 
+      totalIncome: entradasTotais, 
+      totalExpenses: saidasTotais, 
+      netBalance: entradasTotais - saidasTotais, 
       fundBalances: {
         ALUGUER: rendaPot,
         EMERGENCIA: emergencyPot,
@@ -262,6 +272,7 @@ const App: React.FC = () => {
       infantilIncome: infantilInc,
       infantilExpenses: infantilExp
     };
+  }, [transactions, config.rentTarget, treasurySummary]);
   }, [transactions, config.rentTarget, treasurySummary]);
   }, [transactions, config.rentTarget, treasurySummary]);
 
