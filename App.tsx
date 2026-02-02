@@ -1201,7 +1201,7 @@ const FundDistribution = ({ stats }: { stats: FinancialStats }) => (
   <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 h-full">
     <h3 className="text-sm font-bold text-slate-800 mb-6">Distribuição por Fundos</h3>
     <div className="space-y-5">
-      {Object.entries(stats.fundBalances).filter(([key]) => key !== 'GERAL').map(([key, balance]) => {
+      {Object.entries(stats.fundBalances).filter(([key]) => key !== 'GERAL' && key !== 'UTILIDADES').map(([key, balance]) => {
         const info = FUND_INFO[key as FundType];
         if (!info) return null;
         return (
