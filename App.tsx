@@ -175,122 +175,94 @@ const App: React.FC = () => {
     }
   };
 
-  // CÁLCULO AUTOMÁTICO E SIMPLES - sem depender de fundAllocations salvos
+  // CÁLCULO AUTOMÁTICO E SIMPLES - Baseado em Entradas - Saídas - Reservas
   const stats = useMemo((): FinancialStats => {
-    let totalIncome = 0; 
-    let totalExpenses = 0;
-    let infantilIncome = 0; 
-    let infantilExpenses = 0;
+    let entries = 0;      // Total de Entradas (Igreja)
+    let exits = 0;        // Total de Saídas (Igreja)
+    let infantilInc = 0;  // Total Entradas Infantil
+    let infantilExp = 0;  // Total Saídas Infantil
     
-    // Saldos dos fundos - calculados automaticamente
-    let saldoRenda = 0;
-    // Saldo de emergência vem do Treasury Summary (persistido no Firebase)
-    let saldoEmergencia = treasurySummary.emergencyBalance;
-    let saldoGeral = 0; // Saldo Disponível - dinheiro efetivamente livre
-    let saldoInfantil = 0;
+    let rendaPot = 0;     // Saldo da Reserva de Renda
+    const emergencyPot = treasurySummary.emergencyBalance; // Saldo da Emergência (Persistent)
     
-    const META_RENDA = config.rentTarget; // €1350
+    const META_RENDA = config.rentTarget;
+    const ignored: any[] = [];
     
-    // Ordenar por data para processar na ordem correta
-    const transacoesOrdenadas = [...transactions]
-      .filter(tx => 
-        !tx.description.toLowerCase().includes('reposição automática')
-      )
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    // Processar transações em ordem cronológica para rastrear pote de renda
+    const sorted = [...transactions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     
-    transacoesOrdenadas.forEach((tx) => {
+    sorted.forEach(tx => {
       const isInfantil = tx.category === 'INFANTIL';
-      
-      // MIGRAÇÃO: Se há dados históricos com UTILIDADES, somar em GERAL
-      if (tx.fundAllocations && 'UTILIDADES' in tx.fundAllocations && tx.fundAllocations.UTILIDADES as any > 0) {
-        saldoGeral += tx.fundAllocations.UTILIDADES as any;
-        console.log(`🔄 Migração: €${(tx.fundAllocations.UTILIDADES as any).toFixed(2)} de UTILIDADES para GERAL (${tx.description})`);
+      const desc = tx.description.toLowerCase();
+      const isInternal = desc.includes('reposição automática') || desc.includes('transferência');
+
+      if (isInfantil) {
+        if (tx.type === 'INCOME') infantilInc += tx.amount;
+        else infantilExp += tx.amount;
+        return;
       }
-      
+
+      if (isInternal) {
+        ignored.push({ data: tx.date, desc: tx.description, valor: tx.amount, motivo: 'Movimentação Interna' });
+        return;
+      }
+
       if (tx.type === 'INCOME') {
-        // === ENTRADAS ===
-        if (isInfantil) {
-          // Ministério Infantil - 100% separado
-          infantilIncome += tx.amount;
-          saldoInfantil += tx.amount;
+        if (tx.category === 'ALOCACAO_RENDA') {
+          rendaPot += tx.amount;
+          ignored.push({ data: tx.date, desc: tx.description, valor: tx.amount, motivo: 'Alocação Manual para Renda' });
         } else {
-          // Entrada normal da igreja
-          totalIncome += tx.amount;
-          let valor = tx.amount;
-          // A emergência (10%) é persistida no Firebase (não descontar)
-          // Apenas destribuir: Renda + Saldo Disponível
-          
-          // 1º Preencher reserva de renda até a meta
-          const faltaRenda = Math.max(0, META_RENDA - saldoRenda);
-          if (faltaRenda > 0) {
-            const paraRenda = Math.min(valor, faltaRenda);
-            saldoRenda += paraRenda;
-            valor -= paraRenda;
-          }
-          
-          // 2º Resto vai para Saldo Disponível (Geral) - este é o dinheiro efetivamente livre
-          if (valor > 0) {
-            saldoGeral += valor;
-          }
+          entries += tx.amount;
+          // Alimentar pote de renda até a meta
+          const falta = Math.max(0, META_RENDA - rendaPot);
+          rendaPot += Math.min(tx.amount, falta);
         }
       } else {
-        // === SAÍDAS ===
-        if (isInfantil) {
-          infantilExpenses += tx.amount;
-          saldoInfantil -= tx.amount;
-        } else if (tx.category === 'RENDA') {
-          // Pagamento de renda - sai da reserva de renda, se faltar busca no Saldo Disponível
-          totalExpenses += tx.amount;
-          if (saldoRenda >= tx.amount) {
-            saldoRenda -= tx.amount;
-          } else {
-            // Usa o que tem e busca o resto no Saldo Disponível
-            const falta = tx.amount - saldoRenda;
-            saldoRenda = 0;
-            saldoGeral -= falta;
-          }
-        } else if (tx.category === 'CONTA') {
-          // Pagamento de contas (água, luz, tv) - debita DIRETAMENTE do Saldo Disponível
-          // Não usa UTILIDADES pois ele não recebe alocação de entrada
-          totalExpenses += tx.amount;
-          saldoGeral -= tx.amount;
-        } else if (tx.category === 'EMERGENCIA') {
-          // Saída específica do fundo de emergência - SÓ aqui o fundo diminui
-          totalExpenses += tx.amount;
-          if (saldoEmergencia >= tx.amount) {
-            saldoEmergencia -= tx.amount;
-          } else {
-            const falta = tx.amount - saldoEmergencia;
-            saldoEmergencia = 0;
-            saldoGeral -= falta;
-          }
-        } else if (tx.category === 'ALOCACAO_RENDA') {
-          // Alocação manual de saldo para completar renda - sai de Geral, vai para Renda
-          saldoGeral -= tx.amount;
-          saldoRenda += tx.amount;
-        } else {
-          // Outras despesas (incluindo MANUTENCAO) - sai do Saldo Disponível
-          totalExpenses += tx.amount;
-          saldoGeral -= tx.amount;
+        exits += tx.amount;
+        if (tx.category === 'RENDA') {
+          rendaPot = Math.max(0, rendaPot - tx.amount);
         }
+        // Saídas de EMERGENCIA não afetam rendaPot, mas aumentam exits (o que reduz o GERAL no cálculo final)
       }
     });
+
+    // CÁLCULO FINAL DO SALDO DISPONÍVEL (GERAL)
+    // Disponível = (Tudo que entrou) - (Tudo que saiu) - (O que está preso na Renda) - (O que está preso na Emergência)
+    const saldoGeral = entries - exits - rendaPot - emergencyPot;
+
+    // BALANCETE PARA O CONSOLE (Debug solicitado pelo usuário)
+    console.group('%c📊 BALANCETE DE VERIFICAÇÃO', 'color: #3b82f6; font-size: 14px; font-weight: bold;');
+    console.log(`(A) Entradas Igreja: €${entries.toFixed(2)}`);
+    console.log(`(B) Saídas Igreja:   €${exits.toFixed(2)}`);
+    console.log(`(C) Reserva Renda:   €${rendaPot.toFixed(2)}`);
+    console.log(`(D) Emergência (P):  €${emergencyPot.toFixed(2)}`);
+    console.log('%c---------------------------------------', 'color: #ccc');
+    console.log(`%cSALDO_CALCULADO = A - B - C - D`, 'font-weight: bold');
+    console.log(`%c€${calculadoAFixed(entries, exits, rendaPot, emergencyPot)} = ${entries.toFixed(2)} - ${exits.toFixed(2)} - ${rendaPot.toFixed(2)} - ${emergencyPot.toFixed(2)}`, 'color: #10b981; font-weight: bold; font-size: 12px;');
     
-    const fundBalances: Record<FundType, number> = { 
-      ALUGUER: saldoRenda, 
-      EMERGENCIA: saldoEmergencia, 
-      GERAL: saldoGeral, // Saldo Disponível
-      INFANTIL: saldoInfantil 
-    };
-    
+    if (ignored.length > 0) {
+      console.log('🚫 Transações Ignoradas no Cálculo Global:', ignored);
+    }
+    console.groupEnd();
+
+    function calculadoAFixed(a: number, b: number, c: number, d: number) {
+      return (a - b - c - d).toFixed(2);
+    }
+
     return { 
-      totalIncome, 
-      totalExpenses, 
-      netBalance: totalIncome - totalExpenses, 
-      fundBalances,
-      infantilIncome,
-      infantilExpenses
+      totalIncome: entries, 
+      totalExpenses: exits, 
+      netBalance: entries - exits, 
+      fundBalances: {
+        ALUGUER: rendaPot,
+        EMERGENCIA: emergencyPot,
+        GERAL: saldoGeral,
+        INFANTIL: infantilInc - infantilExp
+      },
+      infantilIncome: infantilInc,
+      infantilExpenses: infantilExp
     };
+  }, [transactions, config.rentTarget, treasurySummary]);
   }, [transactions, config.rentTarget, treasurySummary]);
 
   const chartHistory = useMemo(() => {
