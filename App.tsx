@@ -478,13 +478,13 @@ const App: React.FC = () => {
       date: new Date().toISOString(),
       description: 'Transferência para completar Reserva de Renda',
       amount: valorTransferir,
-      type: 'EXPENSE',
-      category: 'OUTROS',
+      type: 'INCOME',
+      category: 'DIZIMO',
       fundAllocations: {
         ALUGUER: valorTransferir,
         EMERGENCIA: 0,
         UTILIDADES: 0,
-        GERAL: -valorTransferir,
+        GERAL: 0,
         INFANTIL: 0,
       }
     };
