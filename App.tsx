@@ -201,31 +201,30 @@ const App: React.FC = () => {
           totalIncome += tx.amount;
           let valor = tx.amount;
           
+          // Calcular percentuais sobre a entrada ORIGINAL
+          const paraEmergencia = tx.amount * PERCENT_EMERGENCIA;    // 10% do total
+          const paraUtilidades = tx.amount * PERCENT_UTILIDADES;    // 10% do total
+          
+          // Agora destribuir o restante
+          let valorRestante = tx.amount - paraEmergencia - paraUtilidades;
+          
           // 1º Preencher reserva de renda até a meta
           const faltaRenda = Math.max(0, META_RENDA - saldoRenda);
           if (faltaRenda > 0) {
-            const paraRenda = Math.min(valor, faltaRenda);
+            const paraRenda = Math.min(valorRestante, faltaRenda);
             saldoRenda += paraRenda;
-            valor -= paraRenda;
+            valorRestante -= paraRenda;
           }
           
-          // 2º 10% para emergência (só aumenta, nunca diminui exceto por saída específica)
-          if (valor > 0) {
-            const paraEmergencia = valor * PERCENT_EMERGENCIA;
-            saldoEmergencia += paraEmergencia;
-            valor -= paraEmergencia;
-          }
+          // 2º Adicionar emergência
+          saldoEmergencia += paraEmergencia;
           
-          // 3º 10% para Água/Luz/TV
-          if (valor > 0) {
-            const paraUtilidades = valor * PERCENT_UTILIDADES;
-            saldoUtilidades += paraUtilidades;
-            valor -= paraUtilidades;
-          }
+          // 3º Adicionar utilidades
+          saldoUtilidades += paraUtilidades;
           
           // 4º Resto vai para Saldo Disponível (Geral)
-          if (valor > 0) {
-            saldoGeral += valor;
+          if (valorRestante > 0) {
+            saldoGeral += valorRestante;
           }
         }
       } else {
