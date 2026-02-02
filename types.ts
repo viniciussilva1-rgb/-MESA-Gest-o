@@ -53,4 +53,5 @@ export interface FinancialStats {
   // Valores separados do infantil (não contam no saldo da igreja)
   infantilIncome: number;
   infantilExpenses: number;
+  realChurchExpenses?: number;
 }

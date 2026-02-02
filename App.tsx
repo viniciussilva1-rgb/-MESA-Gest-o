@@ -226,18 +226,67 @@ const App: React.FC = () => {
     const cashOnHand = entradasTotais - saidasTotais;
     const availableBalance = cashOnHand - rendaPot - emergencyPot;
 
-    // BALANCETE
-    console.group('%c💰 CONFERÊNCIA DE SALDO DISPONÍVEL', 'color: #10b981; font-weight: bold;');
-    console.log(`(A) Entradas Igreja: €${entradasTotais.toFixed(2)}`);
-    console.log(`(B) Saídas Igreja:   €${saidasTotais.toFixed(2)}`);
-    console.log(`(C) Reserva Renda:   €${rendaPot.toFixed(2)}`);
-    console.log(`(D) Emergência:      €${emergencyPot.toFixed(2)}`);
-    console.log(`SALDO DISPONÍVEL: €${availableBalance.toFixed(2)}`);
+    // DEFINIÇÃO DE "SAÍDAS" PARA O USUÁRIO (Inclui o que foi reservado para renda)
+    // Isso garante que Totais + Disponível = Entradas - Emergência
+    const totalOutflowParaExibicao = saidasTotais + rendaPot;
+
+    // --- AUDITORIA AVANÇADA PARA CAÇA DE DIVERGÊNCIA (30,73€) ---
+    const targetDiff = 30.73;
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(today.getDate() - 1);
+
+    const formatData = (d: string) => new Date(d).toLocaleDateString('pt-PT');
+    const isRecent = (d: string) => {
+      const txDate = new Date(d);
+      return txDate.toDateString() === today.toDateString() || txDate.toDateString() === yesterday.toDateString();
+    };
+
+    // 1. Transações Individuais próximas ao valor
+    const suspeitosIndividuais = transactions.filter(t => Math.abs(t.amount - targetDiff) <= 0.05);
+
+    // 2. Pares de transações que somam o valor
+    const paresSuspeitos: any[] = [];
+    for (let i = 0; i < transactions.length; i++) {
+      for (let j = i + 1; j < transactions.length; j++) {
+        if (Math.abs((transactions[i].amount + transactions[j].amount) - targetDiff) <= 0.05) {
+          paresSuspeitos.push([transactions[i], transactions[j]]);
+        }
+      }
+    }
+
+    // 3. Transações Recentes (Hoje/Ontem)
+    const recentes = transactions.filter(t => isRecent(t.date));
+
+    console.group('%c🔍 CAÇA AO TESOURO: EM BUSCA DOS 30,73€', 'color: #ffffff; background: #f43f5e; padding: 4px 10px; border-radius: 8px; font-weight: bold; font-size: 16px;');
+    console.log(`Saldo Calculado: €${availableBalance.toFixed(2)} | Caixa Real: €1272.65 | Diferença: €${(availableBalance - 1272.65).toFixed(2)}`);
+    
+    if (suspeitosIndividuais.length > 0) {
+      console.group('%c🎯 LANÇAMENTOS INDIVIDUAIS (~30,73€)', 'color: #22c55e; font-weight: bold;');
+      suspeitosIndividuais.forEach(t => console.table([{
+        ID: t.id, Data: formatData(t.date), Desc: t.description, Cat: t.category, Valor: t.amount, Tipo: t.type
+      }]));
+      console.groupEnd();
+    }
+
+    if (paresSuspeitos.length > 0) {
+      console.group('%c👯 PARES QUE SOMAM (~30,73€)', 'color: #3b82f6; font-weight: bold;');
+      paresSuspeitos.forEach(p => console.log(`Par: ${p[0].description} (€${p[0].amount}) + ${p[1].description} (€${p[1].amount}) = €${(p[0].amount + p[1].amount).toFixed(2)}`));
+      console.groupEnd();
+    }
+
+    console.group('%c🕒 LANÇAMENTOS RECENTES (HOJE/ONTEM)', 'color: #a855f7; font-weight: bold;');
+    recentes.forEach(t => console.table([{
+      ID: t.id, Data: formatData(t.date), Desc: t.description, Cat: t.category, Valor: t.amount, Status: t.type
+    }]));
     console.groupEnd();
+
+    console.groupEnd();
+    // -----------------------------------------------------------
 
     return { 
       totalIncome: entradasTotais, 
-      totalExpenses: saidasTotais, 
+      totalExpenses: totalOutflowParaExibicao, // Usar o valor que inclui reservas para o Dashboard
       netBalance: cashOnHand, 
       fundBalances: {
         ALUGUER: rendaPot,
@@ -246,7 +295,8 @@ const App: React.FC = () => {
         INFANTIL: infantilInc - infantilExp
       },
       infantilIncome: infantilInc,
-      infantilExpenses: infantilExp
+      infantilExpenses: infantilExp,
+      realChurchExpenses: saidasTotais // Campo extra para auditoria se necessário
     };
   }, [transactions, treasurySummary]);
 
@@ -846,132 +896,160 @@ const App: React.FC = () => {
     </div>
   );
 
-  const renderReports = () => (
-    <div className="space-y-8 animate-in zoom-in-95 duration-500 print:bg-white print:p-0">
-      {/* Botões de Exportação */}
-      <div className="bg-gradient-to-r from-emerald-500 to-teal-600 p-6 rounded-3xl shadow-xl print:hidden">
-        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-          <div className="text-white">
-            <h3 className="text-xl font-black flex items-center gap-2"><Download size={24} /> Exportar Dados</h3>
-            <p className="text-emerald-100 text-sm font-medium">Baixe uma cópia dos dados para seu computador</p>
-          </div>
-          <div className="flex gap-3">
-            <button 
-              onClick={() => {
-                exportToExcel(transactions, stats, config);
-                alert('✅ Arquivo Excel baixado com sucesso!');
-              }}
-              className="flex items-center gap-2 px-6 py-3 bg-white text-emerald-700 rounded-xl hover:bg-emerald-50 transition-all shadow-lg font-bold"
-            >
-              <FileSpreadsheet size={20} /> Baixar Excel
-            </button>
-            <button 
-              onClick={salvarRelatorioHistorico}
-              className="flex items-center gap-2 px-6 py-3 bg-emerald-800 text-white rounded-xl hover:bg-emerald-900 transition-all shadow-lg font-bold"
-            >
-              <History size={20} /> Salvar no Histórico
-            </button>
-          </div>
-        </div>
-      </div>
+  const renderReports = () => {
+    // Gerar resumo diário dinâmico a partir das transações reais
+    const dailyData = transactions.reduce((acc: any, tx) => {
+      const date = new Date(tx.date).toLocaleDateString('pt-PT');
+      if (!acc[date]) acc[date] = { income: 0, expense: 0 };
+      
+      if (tx.category !== 'INFANTIL') {
+        if (tx.type === 'INCOME' && tx.category !== 'ALOCACAO_RENDA') {
+          acc[date].income += tx.amount;
+        } else if (tx.type === 'EXPENSE' || tx.category === 'ALOCACAO_RENDA') {
+          // Incluindo ALOCACAO_RENDA como "saída" do fundo disponível para bater com o que sumiu do card
+          acc[date].expense += tx.amount;
+        }
+      }
+      return acc;
+    }, {});
 
-      <div ref={reportRef} className="bg-white p-10 rounded-3xl shadow-xl border border-slate-100 print:shadow-none print:border-none">
-        <div className="flex justify-between items-start mb-12 border-b-2 border-slate-900 pb-8">
-          <div className="flex gap-5 items-center">
-            <img src="/logo-branco.png" alt="Logo" className="w-16 h-16 object-contain bg-slate-900 rounded-2xl p-2" />
-            <div>
-              <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase">{config.churchName}</h1>
-              <p className="text-slate-500 font-bold uppercase text-xs tracking-widest">Relatório Mensal de Gestão Financeira</p>
+    const sortedDays = Object.entries(dailyData)
+      .map(([date, values]: [string, any]) => ({ date, ...values }))
+      .sort((a, b) => {
+        const dateA = a.date.split('/').reverse().join('-');
+        const dateB = b.date.split('/').reverse().join('-');
+        return dateB.localeCompare(dateA);
+      });
+
+    return (
+      <div className="space-y-8 animate-in zoom-in-95 duration-500 print:bg-white print:p-0">
+        {/* Botões de Exportação */}
+        <div className="bg-gradient-to-r from-emerald-500 to-teal-600 p-6 rounded-3xl shadow-xl print:hidden">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+            <div className="text-white">
+              <h3 className="text-xl font-black flex items-center gap-2"><Download size={24} /> Exportar Dados</h3>
+              <p className="text-emerald-100 text-sm font-medium">Baixe uma cópia dos dados para seu computador</p>
+            </div>
+            <div className="flex gap-3">
+              <button 
+                onClick={() => {
+                  exportToExcel(transactions, stats, config);
+                  alert('✅ Arquivo Excel baixado com sucesso!');
+                }}
+                className="flex items-center gap-2 px-6 py-3 bg-white text-emerald-700 rounded-xl hover:bg-emerald-50 transition-all shadow-lg font-bold"
+              >
+                <FileSpreadsheet size={20} /> Baixar Excel
+              </button>
+              <button 
+                onClick={salvarRelatorioHistorico}
+                className="flex items-center gap-2 px-6 py-3 bg-emerald-800 text-white rounded-xl hover:bg-emerald-900 transition-all shadow-lg font-bold"
+              >
+                <History size={20} /> Salvar Snapshot
+              </button>
             </div>
           </div>
-          <div className="text-right flex items-center gap-3 print:hidden">
-            <button onClick={() => window.print()} className="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-xl hover:bg-black transition-all shadow-lg font-bold">
-              <Printer size={20} /> Imprimir / Salvar PDF
-            </button>
+        </div>
+
+        <div ref={reportRef} className="bg-white p-10 rounded-3xl shadow-xl border border-slate-100 print:shadow-none print:border-none">
+          <div className="flex justify-between items-start mb-12 border-b-2 border-slate-900 pb-8">
+            <div className="flex gap-5 items-center">
+              <img src="/logo-branco.png" alt="Logo" className="w-16 h-16 object-contain bg-slate-900 rounded-2xl p-2" />
+              <div>
+                <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase">{config.churchName}</h1>
+                <p className="text-slate-500 font-bold uppercase text-xs tracking-widest">Relatório Mensal de Gestão Financeira</p>
+              </div>
+            </div>
+            <div className="text-right flex items-center gap-3 print:hidden">
+              <button onClick={() => window.print()} className="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-xl hover:bg-black transition-all shadow-lg font-bold">
+                <Printer size={20} /> Imprimir / Salvar PDF
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+            <ReportStat label="Total Entradas" value={formatCurrency(stats.totalIncome)} />
+            <ReportStat label="Saídas (Despesas + Reservas)" value={formatCurrency(stats.totalExpenses)} />
+            <ReportStat label="Saldo Disponível" value={formatCurrency(stats.fundBalances.GERAL)} highlight />
+            <ReportStat label="Capital em Caixa (Geral + Emerg)" value={formatCurrency(stats.totalIncome - stats.totalExpenses)} />
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+            <div>
+              <h3 className="text-sm font-black text-slate-900 mb-8 uppercase tracking-widest border-l-4 border-slate-900 pl-4">Separação de Verbas por Fundo</h3>
+              <div className="space-y-6">
+                  {Object.entries(stats.fundBalances).filter(([fund]) => fund !== 'GERAL').map(([fund, balance]) => (
+                    <div key={fund}>
+                      <div className="flex justify-between mb-2">
+                        <span className="text-xs font-bold text-slate-600 uppercase">{FUND_INFO[fund as FundType]?.label || fund}</span>
+                        <span className="text-sm font-black text-slate-900">{formatCurrency(balance as number)}</span>
+                      </div>
+                      <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
+                        <div className="h-full rounded-full transition-all duration-1000" style={{ backgroundColor: FUND_INFO[fund as FundType]?.color || '#ccc', width: `${Math.max(0, (balance as number / (stats.totalIncome || 1)) * 100)}%` }} />
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+            <div className="bg-slate-50 p-10 rounded-3xl border border-dashed border-slate-300 flex flex-col justify-center items-center text-center">
+              <div className="p-6 bg-white rounded-full shadow-sm mb-6 border border-slate-100"><FileText size={48} className="text-slate-900" /></div>
+              <h4 className="text-lg font-black text-slate-900 mb-2 uppercase tracking-tight">Validado pela Tesouraria</h4>
+              <div className="w-64 h-[2px] bg-slate-900 mt-12 mb-4" />
+              <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Responsável Legal</p>
+            </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-          <ReportStat label="Total Entradas" value={formatCurrency(stats.totalIncome)} />
-          <ReportStat label="Total Saídas" value={formatCurrency(stats.totalExpenses)} />
-          <ReportStat label="Saldo Disponível" value={formatCurrency(stats.fundBalances.GERAL)} highlight />
-          <ReportStat label="Saldo Total (Entradas - Saídas)" value={formatCurrency(stats.totalIncome - stats.totalExpenses)} />
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-           <div>
-             <h3 className="text-sm font-black text-slate-900 mb-8 uppercase tracking-widest border-l-4 border-slate-900 pl-4">Separação de Verbas por Fundo</h3>
-             <div className="space-y-6">
-                {Object.entries(stats.fundBalances).filter(([fund]) => fund !== 'GERAL').map(([fund, balance]) => (
-                  <div key={fund}>
-                    <div className="flex justify-between mb-2">
-                      <span className="text-xs font-bold text-slate-600 uppercase">{FUND_INFO[fund as FundType]?.label || fund}</span>
-                      <span className="text-sm font-black text-slate-900">{formatCurrency(balance as number)}</span>
-                    </div>
-                    <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full transition-all duration-1000" style={{ backgroundColor: FUND_INFO[fund as FundType]?.color || '#ccc', width: `${Math.max(0, (balance as number / (stats.totalIncome || 1)) * 100)}%` }} />
-                    </div>
-                  </div>
-                ))}
-             </div>
-           </div>
-           <div className="bg-slate-50 p-10 rounded-3xl border border-dashed border-slate-300 flex flex-col justify-center items-center text-center">
-             <div className="p-6 bg-white rounded-full shadow-sm mb-6 border border-slate-100"><FileText size={48} className="text-slate-900" /></div>
-             <h4 className="text-lg font-black text-slate-900 mb-2 uppercase tracking-tight">Validado pela Tesouraria</h4>
-             <div className="w-64 h-[2px] bg-slate-900 mt-12 mb-4" />
-             <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Responsável Legal</p>
-           </div>
-        </div>
-      </div>
-
-      {/* Histórico de Relatórios */}
-      {reportsHistory.length > 0 && (
+        {/* Histórico Dinâmico por Dia */}
         <div className="bg-white p-8 rounded-3xl shadow-xl border border-slate-100 print:hidden">
           <h3 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-3">
-            <History size={24} className="text-blue-600" /> Histórico de Relatórios
+            <History size={24} className="text-blue-600" /> Histórico de Movimentações Reais
           </h3>
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-slate-50">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-black text-slate-500 uppercase">Data</th>
-                  <th className="px-4 py-3 text-right text-xs font-black text-slate-500 uppercase">Entradas</th>
-                  <th className="px-4 py-3 text-right text-xs font-black text-slate-500 uppercase">Saídas</th>
-                  <th className="px-4 py-3 text-right text-xs font-black text-slate-500 uppercase">Saldo</th>
-                  <th className="px-4 py-3 text-right text-xs font-black text-slate-500 uppercase">Emergência</th>
-                  <th className="px-4 py-3 text-right text-xs font-black text-slate-500 uppercase">Reserva Renda</th>
+                  <th className="px-4 py-3 text-right text-xs font-black text-slate-500 uppercase">Entradas dia</th>
+                  <th className="px-4 py-3 text-right text-xs font-black text-slate-500 uppercase">Saídas dia</th>
+                  <th className="px-4 py-3 text-right text-xs font-black text-slate-500 uppercase">Balanço dia</th>
+                  <th className="px-4 py-3 text-right text-xs font-black text-slate-900 uppercase">Emergência (Atual)</th>
+                  <th className="px-4 py-3 text-right text-xs font-black text-slate-900 uppercase">Reserva Renda (Atual)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {reportsHistory.map((report) => (
-                  <tr key={report.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 text-sm font-bold text-slate-700">
-                      {new Date(report.date).toLocaleDateString('pt-PT', { day: '2-digit', month: 'short', year: 'numeric' })}
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm font-bold text-emerald-600">
-                      {formatCurrency(report.totalIncome)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm font-bold text-red-600">
-                      {formatCurrency(report.totalExpenses)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm font-black text-slate-900">
-                      {formatCurrency(report.netBalance)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm font-bold text-red-600">
-                      {formatCurrency(report.fundBalances.EMERGENCIA)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm font-bold text-blue-600">
-                      {formatCurrency(report.fundBalances.ALUGUER)}
-                    </td>
+                {/* Linha de Total Acumulado (Consistente com o Topo) */}
+                <tr className="bg-slate-100/50 font-black">
+                  <td className="px-4 py-3 text-sm text-slate-900 uppercase">TOTAL ACUMULADO</td>
+                  <td className="px-4 py-3 text-right text-sm text-emerald-600">{formatCurrency(stats.totalIncome)}</td>
+                  <td className="px-4 py-3 text-right text-sm text-red-600">{formatCurrency(stats.totalExpenses)}</td>
+                  <td className="px-4 py-3 text-right text-sm text-slate-900">{formatCurrency(stats.totalIncome - stats.totalExpenses)}</td>
+                  <td className="px-4 py-3 text-right text-sm text-slate-900">{formatCurrency(stats.fundBalances.EMERGENCIA)}</td>
+                  <td className="px-4 py-3 text-right text-sm text-slate-900">{formatCurrency(stats.fundBalances.ALUGUER)}</td>
+                </tr>
+                
+                {/* Linhas Diárias Dinâmicas */}
+                {sortedDays.map((day) => (
+                  <tr key={day.date} className="hover:bg-slate-50">
+                    <td className="px-4 py-3 text-sm font-bold text-slate-700">{day.date}</td>
+                    <td className="px-4 py-3 text-right text-sm font-bold text-emerald-600">{formatCurrency(day.income)}</td>
+                    <td className="px-4 py-3 text-right text-sm font-bold text-red-600">{formatCurrency(day.expense)}</td>
+                    <td className="px-4 py-3 text-right text-sm font-black text-slate-900">{formatCurrency(day.income - day.expense)}</td>
+                    <td className="px-4 py-3 text-right text-sm text-slate-400 italic">--</td>
+                    <td className="px-4 py-3 text-right text-sm text-slate-400 italic">--</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          <p className="mt-4 text-[10px] text-slate-400 italic">
+            * As colunas de Emergência e Reserva mostram o saldo total acumulado atual para referência. 
+            O histórico diário detalhado é calculado em tempo real a partir do livro de caixa.
+          </p>
         </div>
-      )}
-    </div>
-  );
+      </div>
+    );
+  };
+
 
   const renderSettings = () => (
     <div className="max-w-3xl mx-auto space-y-8 animate-in slide-in-from-right-4 duration-500">
