@@ -186,7 +186,6 @@ const App: React.FC = () => {
     let saldoRenda = 0;
     // Saldo de emergência vem do Treasury Summary (persistido no Firebase)
     let saldoEmergencia = treasurySummary.emergencyBalance;
-    let saldoUtilidades = 0; // Reservado (não afeta saldo disponível)
     let saldoGeral = 0; // Saldo Disponível - dinheiro efetivamente livre
     let saldoInfantil = 0;
     
@@ -201,11 +200,6 @@ const App: React.FC = () => {
     
     transacoesOrdenadas.forEach((tx) => {
       const isInfantil = tx.category === 'INFANTIL';
-      
-      // DEBUG: Monitorar transações CONTA
-      if (tx.category === 'CONTA') {
-        console.log(`📋 CONTA detectada: ${tx.description} €${tx.amount} | Antes: saldoUtilidades=${saldoUtilidades.toFixed(2)}`);
-      }
       
       if (tx.type === 'INCOME') {
         // === ENTRADAS ===
@@ -252,15 +246,10 @@ const App: React.FC = () => {
             saldoGeral -= falta;
           }
         } else if (tx.category === 'CONTA') {
-          // Pagamento de contas (água, luz, tv) - sai de Utilidades, se faltar busca no Saldo Disponível
+          // Pagamento de contas (água, luz, tv) - debita DIRETAMENTE do Saldo Disponível
+          // Não usa UTILIDADES pois ele não recebe alocação de entrada
           totalExpenses += tx.amount;
-          if (saldoUtilidades >= tx.amount) {
-            saldoUtilidades -= tx.amount;
-          } else {
-            const falta = tx.amount - saldoUtilidades;
-            saldoUtilidades = 0;
-            saldoGeral -= falta;
-          }
+          saldoGeral -= tx.amount;
         } else if (tx.category === 'EMERGENCIA') {
           // Saída específica do fundo de emergência - SÓ aqui o fundo diminui
           totalExpenses += tx.amount;
@@ -286,15 +275,10 @@ const App: React.FC = () => {
     const fundBalances: Record<FundType, number> = { 
       ALUGUER: saldoRenda, 
       EMERGENCIA: saldoEmergencia, 
-      UTILIDADES: saldoUtilidades, // Água, Luz, TV
+      UTILIDADES: 0, // Sempre 0 - não recebe alocação de entrada, débito vai direto para GERAL
       GERAL: saldoGeral, // Saldo Disponível
       INFANTIL: saldoInfantil 
     };
-    
-    // DEBUG: Verificar se saldoUtilidades está sendo alimentado de forma inesperada
-    if (saldoUtilidades !== 0) {
-      console.warn(`⚠️ UTILIDADES não deveria ter valor! saldoUtilidades=${saldoUtilidades.toFixed(2)}, GERAL=${saldoGeral.toFixed(2)}`);
-    }
     
     return { 
       totalIncome, 
@@ -607,38 +591,6 @@ const App: React.FC = () => {
     }
     
     alert(`${removidas} transação(ões) removida(s) com sucesso!\n\nAgora clique em "Recalcular Alocações".`);
-  };
-
-  // Função para LIMPAR UTILIDADES de todas as transações (migração de urgência)
-  const limparUtilidades = async () => {
-    if (!confirm(`LIMPEZA DE EMERGÊNCIA: REMOVER UTILIDADES\n\nIsso vai zerar o campo fundAllocations.UTILIDADES de TODAS as transações.\n\nContinuar?`)) {
-      return;
-    }
-
-    let atualizadas = 0;
-    let erros = 0;
-
-    for (const tx of transactions) {
-      if (tx.fundAllocations.UTILIDADES !== 0) {
-        try {
-          // Zerar UTILIDADES e redistribuir para GERAL
-          const novasAlocacoes = {
-            ...tx.fundAllocations,
-            GERAL: (tx.fundAllocations.GERAL || 0) + (tx.fundAllocations.UTILIDADES || 0),
-            UTILIDADES: 0
-          };
-          await updateTransactionInFirestore(tx.id, { fundAllocations: novasAlocacoes });
-          atualizadas++;
-          console.log(`✅ Limpeza ${tx.description}: UTILIDADES movido para GERAL`);
-        } catch (error) {
-          console.error('Erro ao limpar:', tx.id, error);
-          erros++;
-        }
-      }
-    }
-
-    alert(`${atualizadas} transação(ões) limpas com sucesso!\n${erros} erros.\n\nA página será recarregada para refletir as mudanças.`);
-    setTimeout(() => window.location.reload(), 2000);
   };
 
   // Função para recalcular alocações de todas as transações com as percentagens atuais
@@ -1091,15 +1043,9 @@ const App: React.FC = () => {
                 <p className="text-xs font-bold text-amber-800 mb-3">🧹 Limpar dados antigos com problemas:</p>
                 <button 
                   onClick={limparTransferenciasInternas} 
-                  className="w-full py-2 bg-amber-500 text-white font-bold hover:bg-amber-600 rounded-lg transition-all flex items-center justify-center gap-2 text-sm mb-2"
+                  className="w-full py-2 bg-amber-500 text-white font-bold hover:bg-amber-600 rounded-lg transition-all flex items-center justify-center gap-2 text-sm"
                 >
                   <Trash2 size={14} /> Remover Transferências Internas Antigas
-                </button>
-                <button 
-                  onClick={limparUtilidades} 
-                  className="w-full py-2 bg-red-500 text-white font-bold hover:bg-red-600 rounded-lg transition-all flex items-center justify-center gap-2 text-sm"
-                >
-                  <Trash2 size={14} /> [URGÊNCIA] Limpar UTILIDADES
                 </button>
               </div>
             </div>
