@@ -779,11 +779,12 @@ const App: React.FC = () => {
                 <th className="px-6 py-4 text-left">Descrição</th>
                 <th className="px-6 py-4 text-left">Categoria</th>
                 <th className="px-6 py-4 text-right">Valor</th>
+                <th className="px-6 py-4 text-center">Ação</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {transactions.length === 0 ? (
-                <tr><td colSpan={4} className="px-6 py-12 text-center text-slate-400 italic">Nenhum lançamento registrado.</td></tr>
+                <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-400 italic">Nenhum lançamento registrado.</td></tr>
               ) : (
                 transactions.map(tx => (
                   <tr key={tx.id} className="hover:bg-slate-50/80 transition-colors">
@@ -799,6 +800,23 @@ const App: React.FC = () => {
                     </td>
                     <td className={`px-6 py-4 text-right font-black text-sm ${tx.type === 'INCOME' ? 'text-emerald-600' : 'text-red-600'}`}>
                       {tx.type === 'INCOME' ? '+' : '-'} {formatCurrency(tx.amount)}
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <button
+                        onClick={async () => {
+                          if (confirm(`Deseja cancelar esta movimentação?\n\n${tx.description}\n${formatCurrency(tx.amount)}`)) {
+                            try {
+                              await deleteTransactionFromFirestore(tx.id);
+                              alert('Movimentação cancelada com sucesso!');
+                            } catch (error) {
+                              alert('Erro ao cancelar movimentação.');
+                            }
+                          }
+                        }}
+                        className="px-2 py-1 text-red-600 hover:bg-red-50 rounded-lg transition-colors text-xs font-bold flex items-center gap-1 mx-auto"
+                      >
+                        <Trash2 size={14} /> Cancelar
+                      </button>
                     </td>
                   </tr>
                 ))
@@ -1206,30 +1224,51 @@ const FundDistribution = ({ stats }: { stats: FinancialStats }) => (
   </div>
 );
 
-const RecentTransactions = ({ transactions, formatCurrency }: { transactions: Transaction[], formatCurrency: (v: number) => string }) => (
-  <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-200">
-    <div className="flex items-center justify-between mb-8">
-      <h3 className="text-[11px] font-black text-slate-800 flex items-center gap-2 uppercase tracking-widest"><History size={18} className="text-blue-600" /> Movimentações Recentes</h3>
-    </div>
-    <div className="space-y-4">
-      {transactions.slice(0, 5).map(tx => (
-        <div key={tx.id} className="flex items-center justify-between p-4 hover:bg-slate-50 rounded-2xl border border-transparent transition-all">
-          <div className="flex items-center gap-4">
-            <div className={`p-2.5 rounded-xl ${tx.type === 'INCOME' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
-               {tx.type === 'INCOME' ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
+const RecentTransactions = ({ transactions, formatCurrency }: { transactions: Transaction[], formatCurrency: (v: number) => string }) => {
+  const handleDeleteTransaction = async (transactionId: string, description: string, amount: number) => {
+    if (confirm(`Deseja cancelar esta movimentação?\n\n${description}\n${formatCurrency(amount)}`)) {
+      try {
+        await deleteTransactionFromFirestore(transactionId);
+        alert('Movimentação cancelada com sucesso!');
+      } catch (error) {
+        alert('Erro ao cancelar movimentação.');
+      }
+    }
+  };
+
+  return (
+    <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-200">
+      <div className="flex items-center justify-between mb-8">
+        <h3 className="text-[11px] font-black text-slate-800 flex items-center gap-2 uppercase tracking-widest"><History size={18} className="text-blue-600" /> Movimentações Recentes</h3>
+      </div>
+      <div className="space-y-4">
+        {transactions.slice(0, 5).map(tx => (
+          <div key={tx.id} className="flex items-center justify-between p-4 hover:bg-slate-50 rounded-2xl border border-transparent transition-all group">
+            <div className="flex items-center gap-4 flex-1">
+              <div className={`p-2.5 rounded-xl ${tx.type === 'INCOME' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
+                 {tx.type === 'INCOME' ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
+              </div>
+              <div>
+                <p className="text-sm font-bold text-slate-900">{tx.description}</p>
+                <p className="text-[9px] font-black text-slate-400 uppercase tracking-tight">{tx.category} • {new Date(tx.date).toLocaleDateString()}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-bold text-slate-900">{tx.description}</p>
-              <p className="text-[9px] font-black text-slate-400 uppercase tracking-tight">{tx.category} • {new Date(tx.date).toLocaleDateString()}</p>
+            <div className="flex items-center gap-4">
+              <div className={`text-sm font-black ${tx.type === 'INCOME' ? 'text-emerald-600' : 'text-red-600'}`}>
+                {tx.type === 'INCOME' ? '+' : '-'} {formatCurrency(tx.amount)}
+              </div>
+              <button
+                onClick={() => handleDeleteTransaction(tx.id, tx.description, tx.amount)}
+                className="px-2 py-1 text-red-600 hover:bg-red-50 rounded-lg transition-colors text-xs font-bold opacity-0 group-hover:opacity-100"
+              >
+                <Trash2 size={14} />
+              </button>
             </div>
           </div>
-          <div className={`text-sm font-black ${tx.type === 'INCOME' ? 'text-emerald-600' : 'text-red-600'}`}>
-            {tx.type === 'INCOME' ? '+' : '-'} {formatCurrency(tx.amount)}
-          </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 export default App;
