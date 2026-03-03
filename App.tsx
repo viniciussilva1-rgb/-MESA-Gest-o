@@ -216,8 +216,8 @@ const App: React.FC = () => {
         return;
       }
 
-      // Transações de emergência não contam como entradas/saídas normais
-      // Elas são contabilizadas diretamente no treasurySummary
+      // Transações de emergência: INCOME = saída para emergência, EXPENSE = saída da emergência
+      // Ambas não contam como entradas/saídas normais - vão direto para treasurySummary
       if (isEmergencia) {
         return;
       }
@@ -244,20 +244,20 @@ const App: React.FC = () => {
     
     const openingBalanceGeral = lastReport ? (lastReport.closingBalance ?? 0) : 0;
     
-    // Variação das reservas no período (Se houver snapshot anterior)
+    // Variação da reserva de renda no período (Se houver snapshot anterior)
     const rentDelta = lastReport 
       ? Math.max(0, currentRentTotal - (lastReport.fundBalances?.ALUGUER ?? 0)) 
       : currentRentTotal;
-    const emergencyDelta = lastReport 
-      ? Math.max(0, currentEmergencyTotal - (lastReport.fundBalances?.EMERGENCIA ?? 0)) 
-      : currentEmergencyTotal;
+    
+    // Nota: emergencyDelta foi removido porque agora a emergência é gerenciada manualmente
+    // via transações de EMERGENCIA (INCOME/EXPENSE), não via alocação automática
 
-    const availableBalance = isNaN(openingBalanceGeral + entradasTotais - saidasTotais - rentDelta - emergencyDelta) 
+    const availableBalance = isNaN(openingBalanceGeral + entradasTotais - saidasTotais - rentDelta) 
       ? 0 
-      : openingBalanceGeral + entradasTotais - saidasTotais - rentDelta - emergencyDelta;
+      : openingBalanceGeral + entradasTotais - saidasTotais - rentDelta;
 
     // DEFINIÇÃO DE "SAÍDAS" PARA O USUÁRIO (Inclui o que foi reservado no período)
-    const totalOutflowParaExibicao = saidasTotais + rentDelta + emergencyDelta;
+    const totalOutflowParaExibicao = saidasTotais + rentDelta;
 
     // --- AUDITORIA AVANÇADA PARA CAÇA DE DIVERGÊNCIA (30,73€) ---
     const targetDiff = 30.73;
@@ -409,13 +409,9 @@ const App: React.FC = () => {
         return; // Não processar outras lógicas para EMERGENCIA
       }
       
-      // 1. Emergência: 10% de Dízimos e Ofertas (auto-alocação)
-      if ((tx.category === 'DIZIMO' || tx.category === 'OFERTA') && tx.type === 'INCOME') {
-        const emergencyIncrement = tx.amount * 0.10;
-        await incrementEmergencyBalance(emergencyIncrement);
-      }
+      // (Nota: Auto-alocação de 10% para emergência foi removida para evitar duplicação com transações manuais)
       
-      // 2. Reserva de Renda: Alocação Automática
+      // 1. Reserva de Renda: Alocação Automática
       if (tx.type === 'INCOME' && tx.category !== 'INFANTIL' && tx.category !== 'ALOCACAO_RENDA') {
         const currentRent = treasurySummary.rentReserveBalance;
         const missing = Math.max(0, config.rentTarget - currentRent);
@@ -479,10 +475,7 @@ const App: React.FC = () => {
         }
       }
       
-      // Reverter Emergência (10% de Dizimo/Oferta INCOME)
-      if ((tx.category === 'DIZIMO' || tx.category === 'OFERTA') && tx.type === 'INCOME') {
-        await incrementEmergencyBalance(-(tx.amount * 0.10));
-      }
+      // (Nota: Reversão de auto-alocação de 10% foi removida)
       
       // Reverter Reserva de Renda
       if (tx.type === 'INCOME' && tx.category !== 'INFANTIL' && tx.category !== 'ALOCACAO_RENDA') {
