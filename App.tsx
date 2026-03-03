@@ -193,8 +193,8 @@ const App: React.FC = () => {
     let infantilExp = 0;      
     
     // USAR SALDOS PERSISTENTES DO FIRESTORE (Sempre mostram o total atual)
-    const currentRentTotal = treasurySummary.rentReserveBalance; 
-    const currentEmergencyTotal = treasurySummary.emergencyBalance; 
+    const currentRentTotal = treasurySummary?.rentReserveBalance ?? 0; 
+    const currentEmergencyTotal = treasurySummary?.emergencyBalance ?? 0; 
     
     // Filtrar transações APÓS o último relatório
     const filteredTransactions = lastReport 
@@ -235,13 +235,19 @@ const App: React.FC = () => {
     // Mas para simplificar e garantir precisão com o caixa físico:
     // Saldo Disponível = (Saldo Inicial Geral) + Entradas (Igreja) - Saídas (Igreja) - (Aumento nas Reservas)
     
-    const openingBalanceGeral = lastReport ? lastReport.closingBalance : 0;
+    const openingBalanceGeral = lastReport ? (lastReport.closingBalance ?? 0) : 0;
     
     // Variação das reservas no período (Se houver snapshot anterior)
-    const rentDelta = lastReport ? Math.max(0, currentRentTotal - lastReport.fundBalances.ALUGUER) : currentRentTotal;
-    const emergencyDelta = lastReport ? Math.max(0, currentEmergencyTotal - lastReport.fundBalances.EMERGENCIA) : currentEmergencyTotal;
+    const rentDelta = lastReport 
+      ? Math.max(0, currentRentTotal - (lastReport.fundBalances?.ALUGUER ?? 0)) 
+      : currentRentTotal;
+    const emergencyDelta = lastReport 
+      ? Math.max(0, currentEmergencyTotal - (lastReport.fundBalances?.EMERGENCIA ?? 0)) 
+      : currentEmergencyTotal;
 
-    const availableBalance = openingBalanceGeral + entradasTotais - saidasTotais - rentDelta - emergencyDelta;
+    const availableBalance = isNaN(openingBalanceGeral + entradasTotais - saidasTotais - rentDelta - emergencyDelta) 
+      ? 0 
+      : openingBalanceGeral + entradasTotais - saidasTotais - rentDelta - emergencyDelta;
 
     // DEFINIÇÃO DE "SAÍDAS" PARA O USUÁRIO (Inclui o que foi reservado no período)
     const totalOutflowParaExibicao = saidasTotais + rentDelta + emergencyDelta;
@@ -300,7 +306,8 @@ const App: React.FC = () => {
     console.groupEnd();
     // -----------------------------------------------------------
 
-    const cashOnHand = (availableBalance ?? 0) + (currentRentTotal ?? 0) + (currentEmergencyTotal ?? 0) + (infantilInc - infantilExp);
+    const infantilBalance = (infantilInc - infantilExp) ?? 0;
+    const cashOnHand = (availableBalance ?? 0) + (currentRentTotal ?? 0) + (currentEmergencyTotal ?? 0) + (isNaN(infantilBalance) ? 0 : infantilBalance);
 
     return { 
       openingBalance: openingBalanceGeral ?? 0,
@@ -310,8 +317,8 @@ const App: React.FC = () => {
       fundBalances: {
         ALUGUER: currentRentTotal ?? 0,
         EMERGENCIA: currentEmergencyTotal ?? 0,
-        GERAL: availableBalance ?? 0,
-        INFANTIL: (infantilInc - infantilExp) ?? 0
+        GERAL: isNaN(availableBalance) ? 0 : (availableBalance ?? 0),
+        INFANTIL: isNaN(infantilBalance) ? 0 : infantilBalance
       },
       infantilIncome: infantilInc ?? 0,
       infantilExpenses: infantilExp ?? 0,
@@ -471,7 +478,11 @@ const App: React.FC = () => {
     }
   };
 
-  const formatCurrency = (val: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(val);
+  const formatCurrency = (val: number) => {
+    // Garantir que val é sempre um número válido
+    const validVal = isNaN(val) || val === undefined || val === null ? 0 : val;
+    return new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(validVal);
+  };
 
   // Função para salvar relatório no histórico
   const salvarRelatorioHistorico = async () => {

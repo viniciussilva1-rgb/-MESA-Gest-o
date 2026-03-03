@@ -48,7 +48,11 @@ const TransactionForm: React.FC<Props> = ({ onAdd, config, currentRentBalance })
     }
   }, [type]);
 
-  const formatCurrency = (val: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(val);
+  const formatCurrency = (val: number) => {
+    // Garantir que val é sempre um número válido
+    const validVal = isNaN(val) || val === undefined || val === null ? 0 : val;
+    return new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(validVal);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

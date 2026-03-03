@@ -230,8 +230,8 @@ export const subscribeTreasurySummary = (
     if (snapshot.exists()) {
       const data = snapshot.data();
       callback({ 
-        emergencyBalance: data?.emergencyBalance ?? 280.11,
-        rentReserveBalance: data?.rentReserveBalance ?? 900.00,
+        emergencyBalance: Math.max(0, data?.emergencyBalance ?? 280.11),
+        rentReserveBalance: Math.max(0, data?.rentReserveBalance ?? 900.00),
         updatedAt: data?.updatedAt ?? new Date().toISOString()
       } as TreasurySummary);
     } else {
