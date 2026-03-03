@@ -206,12 +206,19 @@ const App: React.FC = () => {
 
     sorted.forEach(tx => {
       const isInfantil = tx.category === 'INFANTIL';
+      const isEmergencia = tx.category === 'EMERGENCIA';
       const desc = tx.description.toLowerCase();
       const isInternal = desc.includes('reposição automática');
 
       if (isInfantil) {
         if (tx.type === 'INCOME') infantilInc += tx.amount;
         else infantilExp += tx.amount;
+        return;
+      }
+
+      // Transações de emergência não contam como entradas/saídas normais
+      // Elas são contabilizadas diretamente no treasurySummary
+      if (isEmergencia) {
         return;
       }
 
@@ -388,7 +395,21 @@ const App: React.FC = () => {
       
       // === PERSISTÊNCIA DE SALDOS REAIS (TREASURY) ===
       
-      // 1. Emergência: 10% de Dízimos e Ofertas
+      // 0. Emergência: Transações explícitas de EMERGENCIA
+      if (tx.category === 'EMERGENCIA') {
+        if (tx.type === 'INCOME') {
+          // INCOME: Adicionar ao fundo de emergência (ex: 10% do dízimo retirado)
+          await incrementEmergencyBalance(tx.amount);
+          console.log(`Adição ao Fundo de Emergência: +€${tx.amount.toFixed(2)}`);
+        } else {
+          // EXPENSE: Remover do fundo de emergência
+          await incrementEmergencyBalance(-tx.amount);
+          console.log(`Saída do Fundo de Emergência: -€${tx.amount.toFixed(2)}`);
+        }
+        return; // Não processar outras lógicas para EMERGENCIA
+      }
+      
+      // 1. Emergência: 10% de Dízimos e Ofertas (auto-alocação)
       if ((tx.category === 'DIZIMO' || tx.category === 'OFERTA') && tx.type === 'INCOME') {
         const emergencyIncrement = tx.amount * 0.10;
         await incrementEmergencyBalance(emergencyIncrement);
@@ -448,6 +469,15 @@ const App: React.FC = () => {
       await deleteTransactionFromFirestore(tx.id);
       
       // 2. Reverter impact no Treasury persistent balance
+      
+      // Reverter Emergência: Transações explícitas de EMERGENCIA
+      if (tx.category === 'EMERGENCIA') {
+        if (tx.type === 'INCOME') {
+          await incrementEmergencyBalance(-tx.amount);
+        } else {
+          await incrementEmergencyBalance(tx.amount);
+        }
+      }
       
       // Reverter Emergência (10% de Dizimo/Oferta INCOME)
       if ((tx.category === 'DIZIMO' || tx.category === 'OFERTA') && tx.type === 'INCOME') {

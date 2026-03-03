@@ -306,6 +306,7 @@ const TransactionForm: React.FC<Props> = ({ onAdd, config, currentRentBalance })
                   <option value="DIZIMO">Dízimo</option>
                   <option value="OFERTA">Oferta</option>
                   <option value="INFANTIL">Ministério Infantil</option>
+                  <option value="EMERGENCIA">Fundo de Emergência</option>
                   <option value="OUTROS">Outros</option>
                 </>
               ) : (
