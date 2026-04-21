@@ -73,7 +73,7 @@ const TransactionForm: React.FC<Props> = ({ onAdd, config, currentRentBalance })
     // SIMPLIFICADO: fundAllocations não é mais usado para cálculos
     // O App.tsx calcula tudo automaticamente baseado nas transações
     let allocations: Record<FundType, number> = {
-      ALUGUER: 0, EMERGENCIA: 0, UTILIDADES: 0, GERAL: 0, INFANTIL: 0
+      ALUGUER: 0, EMERGENCIA: 0, GERAL: 0, INFANTIL: 0
     };
 
     // Apenas marca o valor para referência (não usado nos cálculos)

@@ -313,7 +313,7 @@ const App: React.FC = () => {
     console.groupEnd();
     // -----------------------------------------------------------
 
-    const infantilBalance = (infantilInc - infantilExp) ?? 0;
+    const infantilBalance = infantilInc - infantilExp;
     const cashOnHand = (availableBalance ?? 0) + (currentRentTotal ?? 0) + (currentEmergencyTotal ?? 0) + (isNaN(infantilBalance) ? 0 : infantilBalance);
 
     return { 
@@ -409,7 +409,12 @@ const App: React.FC = () => {
         return; // Não processar outras lógicas para EMERGENCIA
       }
       
-      // (Nota: Auto-alocação de 10% para emergência foi removida para evitar duplicação com transações manuais)
+      // 0.5. NOVO: Desconto automático de 10% para emergência em DÍZIMOS
+      if (tx.type === 'INCOME' && tx.category === 'DIZIMO') {
+        const emergencyAmount = tx.amount * 0.10; // 10% do dízimo
+        await incrementEmergencyBalance(emergencyAmount);
+        console.log(`🚨 Desconto de Emergência (10% de Dízimo): +€${emergencyAmount.toFixed(2)}`);
+      }
       
       // 1. Reserva de Renda: Alocação Automática
       if (tx.type === 'INCOME' && tx.category !== 'INFANTIL' && tx.category !== 'ALOCACAO_RENDA') {
@@ -475,7 +480,12 @@ const App: React.FC = () => {
         }
       }
       
-      // (Nota: Reversão de auto-alocação de 10% foi removida)
+      // Reverter desconto automático de 10% de DÍZIMO para emergência
+      if (tx.type === 'INCOME' && tx.category === 'DIZIMO') {
+        const emergencyAmount = tx.amount * 0.10;
+        await incrementEmergencyBalance(-emergencyAmount);
+        console.log(`🚨 Reversão de Desconto de Emergência (10%): -€${emergencyAmount.toFixed(2)}`);
+      }
       
       // Reverter Reserva de Renda
       if (tx.type === 'INCOME' && tx.category !== 'INFANTIL' && tx.category !== 'ALOCACAO_RENDA') {
