@@ -1,5 +1,5 @@
 
-export type FundType = 'ALUGUER' | 'EMERGENCIA' | 'GERAL' | 'INFANTIL';
+export type FundType = 'ALUGUER' | 'GERAL' | 'INFANTIL';
 
 export interface SystemConfig {
   churchName: string;
@@ -7,7 +7,6 @@ export interface SystemConfig {
   rentTarget: number;
   rentAmount: number; // Valor da renda mensal (ex: 450€)
   sheetsUrl?: string; // URL do Webhook do Google Apps Script
-  emergencyInitialBalance?: number; // Saldo inicial do fundo de emergência (do último relatório)
 }
 
 export interface ReportHistory {
@@ -40,7 +39,7 @@ export interface Transaction {
   description: string;
   amount: number;
   type: 'INCOME' | 'EXPENSE';
-  category: 'DIZIMO' | 'OFERTA' | 'INFANTIL' | 'CONTA' | 'MANUTENCAO' | 'SOCIAL' | 'RENDA' | 'OUTROS' | 'EMERGENCIA' | 'ALOCACAO_RENDA';
+  category: 'DIZIMO' | 'OFERTA' | 'INFANTIL' | 'CONTA' | 'MANUTENCAO' | 'SOCIAL' | 'RENDA' | 'OUTROS' | 'ALOCACAO_RENDA';
   fundAllocations: Record<FundType, number>;
   cashCount?: CashCount;
   invoiceRef?: string;

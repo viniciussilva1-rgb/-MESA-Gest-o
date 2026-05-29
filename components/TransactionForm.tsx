@@ -73,7 +73,7 @@ const TransactionForm: React.FC<Props> = ({ onAdd, config, currentRentBalance })
     // SIMPLIFICADO: fundAllocations não é mais usado para cálculos
     // O App.tsx calcula tudo automaticamente baseado nas transações
     let allocations: Record<FundType, number> = {
-      ALUGUER: 0, EMERGENCIA: 0, GERAL: 0, INFANTIL: 0
+      ALUGUER: 0, GERAL: 0, INFANTIL: 0
     };
 
     // Apenas marca o valor para referência (não usado nos cálculos)
@@ -306,14 +306,12 @@ const TransactionForm: React.FC<Props> = ({ onAdd, config, currentRentBalance })
                   <option value="DIZIMO">Dízimo</option>
                   <option value="OFERTA">Oferta</option>
                   <option value="INFANTIL">Ministério Infantil</option>
-                  <option value="EMERGENCIA">Fundo de Emergência</option>
                   <option value="OUTROS">Outros</option>
                 </>
               ) : (
                 <>
                   <option value="RENDA">Pagamento de Renda</option>
                   <option value="CONTA">Contas Fixas (Água/Luz)</option>
-                  <option value="EMERGENCIA">Usar Fundo de Emergência</option>
                   <option value="MANUTENCAO">Manutenção</option>
                   <option value="SOCIAL">Social</option>
                   <option value="INFANTIL">Ministério Infantil</option>
@@ -323,14 +321,7 @@ const TransactionForm: React.FC<Props> = ({ onAdd, config, currentRentBalance })
             </select>
           </div>
           
-          {type === 'EXPENSE' && category === 'EMERGENCIA' ? (
-            <div className="space-y-1.5">
-              <label className="text-sm font-semibold text-slate-700">Fundo</label>
-              <div className="px-3 py-2.5 bg-red-50 rounded-xl border border-red-200 text-xs text-red-700 font-semibold">
-                ⚠️ Sai do Fundo de Emergência
-              </div>
-            </div>
-          ) : type === 'EXPENSE' && category !== 'RENDA' && category !== 'INFANTIL' ? (
+          {type === 'EXPENSE' && category !== 'RENDA' && category !== 'INFANTIL' ? (
             <div className="space-y-1.5">
               <label className="text-sm font-semibold text-slate-700">Retirar do Fundo</label>
               <select
@@ -338,7 +329,7 @@ const TransactionForm: React.FC<Props> = ({ onAdd, config, currentRentBalance })
                 onChange={(e) => setTargetFund(e.target.value as FundType)}
                 className="w-full px-3 py-2.5 bg-white text-slate-900 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none text-sm transition-all appearance-none cursor-pointer"
               >
-                {Object.entries(FUND_INFO).filter(([key]) => key !== 'INFANTIL' && key !== 'EMERGENCIA').map(([key, info]) => (
+                {Object.entries(FUND_INFO).filter(([key]) => key !== 'INFANTIL').map(([key, info]) => (
                   <option key={key} value={key}>{info.label}</option>
                 ))}
               </select>

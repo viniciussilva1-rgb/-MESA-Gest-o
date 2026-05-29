@@ -214,7 +214,6 @@ export const getLatestReport = async (): Promise<ReportHistory | null> => {
 // ============ TREASURY SUMMARY ============
 
 export interface TreasurySummary {
-  emergencyBalance: number;
   rentReserveBalance: number;
   updatedAt: string;
 }
@@ -230,15 +229,13 @@ export const subscribeTreasurySummary = (
     if (snapshot.exists()) {
       const data = snapshot.data();
       callback({ 
-        emergencyBalance: Math.max(0, data?.emergencyBalance ?? 280.11),
-        rentReserveBalance: Math.max(0, data?.rentReserveBalance ?? 900.00),
+        rentReserveBalance: Math.max(0, data?.rentReserveBalance ?? 0),
         updatedAt: data?.updatedAt ?? new Date().toISOString()
       } as TreasurySummary);
     } else {
       // Valor padrão inicial
       callback({ 
-        emergencyBalance: 280.11, 
-        rentReserveBalance: 900.00, 
+        rentReserveBalance: 0,
         updatedAt: new Date().toISOString() 
       });
     }
@@ -248,35 +245,11 @@ export const subscribeTreasurySummary = (
   });
 };
 
-export const incrementEmergencyBalance = async (amount: number): Promise<void> => {
-  try {
-    const summaryRef = doc(db, TREASURY_COLLECTION, TREASURY_SUMMARY_DOC);
-    const snapshot = await getDocs(query(collection(db, TREASURY_COLLECTION)));
-    let currentBalance = 280.11;
-    
-    snapshot.forEach((doc) => {
-      if (doc.id === TREASURY_SUMMARY_DOC && doc.data().emergencyBalance !== undefined) {
-        currentBalance = doc.data().emergencyBalance;
-      }
-    });
-    
-    await setDoc(summaryRef, {
-      emergencyBalance: currentBalance + amount,
-      updatedAt: new Date().toISOString()
-    }, { merge: true });
-    
-    console.log(`Saldo de emergência incrementado em €${amount.toFixed(2)}`);
-  } catch (error) {
-    console.error("Erro ao incrementar emergencyBalance:", error);
-    throw error;
-  }
-};
-
 export const incrementRentReserveBalance = async (amount: number): Promise<void> => {
   try {
     const summaryRef = doc(db, TREASURY_COLLECTION, TREASURY_SUMMARY_DOC);
     const snapshot = await getDocs(query(collection(db, TREASURY_COLLECTION)));
-    let currentBalance = 900.00;
+    let currentBalance = 0;
     
     snapshot.forEach((doc) => {
       if (doc.id === TREASURY_SUMMARY_DOC && doc.data().rentReserveBalance !== undefined) {
@@ -292,6 +265,34 @@ export const incrementRentReserveBalance = async (amount: number): Promise<void>
     console.log(`Reserva de renda incrementada em €${amount.toFixed(2)}`);
   } catch (error) {
     console.error("Erro ao incrementar rentReserveBalance:", error);
+    throw error;
+  }
+};
+
+const deleteCollectionDocs = async (collectionName: string): Promise<void> => {
+  const snapshot = await getDocs(collection(db, collectionName));
+  for (const docItem of snapshot.docs) {
+    await deleteDoc(docItem.ref);
+  }
+};
+
+export const resetAllFinancialData = async (defaultConfig: SystemConfig): Promise<void> => {
+  try {
+    await deleteCollectionDocs(TRANSACTIONS_COLLECTION);
+    await deleteCollectionDocs(REPORTS_COLLECTION);
+    await deleteCollectionDocs(TREASURY_COLLECTION);
+
+    await setDoc(doc(db, TREASURY_COLLECTION, TREASURY_SUMMARY_DOC), {
+      rentReserveBalance: 0,
+      updatedAt: new Date().toISOString()
+    });
+
+    await setDoc(doc(db, CONFIG_COLLECTION, CONFIG_DOC_ID), defaultConfig);
+
+    localStorage.removeItem('gestao_a_mesa_data');
+    localStorage.removeItem('gestao_a_mesa_config');
+  } catch (error) {
+    console.error('Erro ao resetar dados financeiros:', error);
     throw error;
   }
 };

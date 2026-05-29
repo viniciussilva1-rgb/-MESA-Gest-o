@@ -17,8 +17,8 @@ import {
   saveReportHistory,
   subscribeToReportsHistory,
   subscribeTreasurySummary,
-  incrementEmergencyBalance,
   incrementRentReserveBalance,
+  resetAllFinancialData,
   TreasurySummary
 } from './services/firestoreService';
 import { subscribeToAuthState, logout } from './services/authService';
@@ -43,18 +43,16 @@ const App: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [reportsHistory, setReportsHistory] = useState<ReportHistory[]>([]);
   const [treasurySummary, setTreasurySummary] = useState<TreasurySummary>({ 
-    emergencyBalance: 280.11, 
-    rentReserveBalance: 900.00,
+    rentReserveBalance: 0,
     updatedAt: new Date().toISOString() 
   });
 
   const defaultConfig: SystemConfig = {
     churchName: 'Igreja  À MESA',
-    fundPercentages: { ALUGUER: 40, EMERGENCIA: 10, GERAL: 50, INFANTIL: 0 },
+    fundPercentages: { ALUGUER: 40, GERAL: 60, INFANTIL: 0 },
     rentTarget: 1350,
     rentAmount: 450,
-    sheetsUrl: '',
-    emergencyInitialBalance: 0 // Saldo será calculado apenas a partir das transações
+    sheetsUrl: ''
   };
 
   const [config, setConfig] = useState<SystemConfig>(defaultConfig);
@@ -135,8 +133,7 @@ const App: React.FC = () => {
     
     const unsubscribe = subscribeToConfig((firebaseConfig) => {
       if (firebaseConfig) {
-        // Resetar emergencyInitialBalance para 0 (será calculado apenas a partir das transações)
-        setConfig({...firebaseConfig, emergencyInitialBalance: 0});
+        setConfig(firebaseConfig);
       }
       setConfigLoaded(true);
     });
@@ -153,7 +150,7 @@ const App: React.FC = () => {
     return () => unsubscribe();
   }, [user]);
 
-  // Escutar treasury summary do Firebase (saldo de emergência persistido)
+  // Escutar treasury summary do Firebase
   useEffect(() => {
     if (!user) return;
     
@@ -180,33 +177,27 @@ const App: React.FC = () => {
     }
   };
 
-  // CÁLCULO DE SALDO REAL - Fundo GERAL deve bater com numerário real
+  // Cálculo financeiro com Infantil totalmente separado da igreja
   const stats = useMemo((): FinancialStats => {
-    // 1. Identificar o último relatório fechado
     const lastReport = reportsHistory.length > 0 
       ? [...reportsHistory].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
       : null;
 
-    let entradasTotais = 0;   
-    let saidasTotais = 0;     
-    let infantilInc = 0;      
-    let infantilExp = 0;      
-    
-    // USAR SALDOS PERSISTENTES DO FIRESTORE (Sempre mostram o total atual)
-    const currentRentTotal = treasurySummary?.rentReserveBalance ?? 0; 
-    const currentEmergencyTotal = treasurySummary?.emergencyBalance ?? 0; 
-    
-    // Filtrar transações APÓS o último relatório
+    let entradasTotais = 0;
+    let saidasTotais = 0;
+    let infantilInc = 0;
+    let infantilExp = 0;
+
+    const currentRentTotal = treasurySummary?.rentReserveBalance ?? 0;
+
     const filteredTransactions = lastReport 
       ? transactions.filter(tx => new Date(tx.date).getTime() > new Date(lastReport.date).getTime())
       : transactions;
 
-    const ignored: any[] = [];
     const sorted = [...filteredTransactions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     sorted.forEach(tx => {
       const isInfantil = tx.category === 'INFANTIL';
-      const isEmergencia = tx.category === 'EMERGENCIA';
       const desc = tx.description.toLowerCase();
       const isInternal = desc.includes('reposição automática');
 
@@ -216,105 +207,36 @@ const App: React.FC = () => {
         return;
       }
 
-      // Transações de emergência: INCOME = saída para emergência, EXPENSE = saída da emergência
-      // Ambas não contam como entradas/saídas normais - vão direto para treasurySummary
-      if (isEmergencia) {
+      if (isInternal) {
         return;
       }
 
-      if (isInternal) {
-        ignored.push({ data: tx.date, desc: tx.description, valor: tx.amount, motivo: 'Sistema Antigo' });
+      if (tx.category === 'ALOCACAO_RENDA') {
         return;
       }
 
       if (tx.type === 'INCOME') {
-        if (tx.category !== 'ALOCACAO_RENDA') {
-          entradasTotais += tx.amount;
-        }
+        entradasTotais += tx.amount;
       } else {
-        if (tx.category !== 'ALOCACAO_RENDA') {
-          saidasTotais += tx.amount;
-        }
+        saidasTotais += tx.amount;
       }
     });
 
-    // O "Saldo Disponível" agora é: Saldo Anterior + Entradas Período - Saídas Período - Ajustes de Fundo No Período
-    // Mas para simplificar e garantir precisão com o caixa físico:
-    // Saldo Disponível = (Saldo Inicial Geral) + Entradas (Igreja) - Saídas (Igreja) - (Aumento nas Reservas)
-    
     const openingBalanceGeral = lastReport ? (lastReport.closingBalance ?? 0) : 0;
-    
-    // Variação da reserva de renda no período (Se houver snapshot anterior)
+
     const rentDelta = lastReport 
       ? Math.max(0, currentRentTotal - (lastReport.fundBalances?.ALUGUER ?? 0)) 
       : currentRentTotal;
-    
-    // Nota: emergencyDelta foi removido porque agora a emergência é gerenciada manualmente
-    // via transações de EMERGENCIA (INCOME/EXPENSE), não via alocação automática
 
     const availableBalance = isNaN(openingBalanceGeral + entradasTotais - saidasTotais - rentDelta) 
       ? 0 
       : openingBalanceGeral + entradasTotais - saidasTotais - rentDelta;
 
-    // DEFINIÇÃO DE "SAÍDAS" PARA O USUÁRIO (Inclui o que foi reservado no período)
     const totalOutflowParaExibicao = saidasTotais + rentDelta;
 
-    // --- AUDITORIA AVANÇADA PARA CAÇA DE DIVERGÊNCIA (30,73€) ---
-    const targetDiff = 30.73;
-    const today = new Date();
-    const yesterday = new Date();
-    yesterday.setDate(today.getDate() - 1);
-
-    const formatData = (d: string) => new Date(d).toLocaleDateString('pt-PT');
-    const isRecent = (d: string) => {
-      const txDate = new Date(d);
-      return txDate.toDateString() === today.toDateString() || txDate.toDateString() === yesterday.toDateString();
-    };
-
-    // 1. Transações Individuais próximas ao valor
-    const suspeitosIndividuais = transactions.filter(t => Math.abs(t.amount - targetDiff) <= 0.05);
-
-    // 2. Pares de transações que somam o valor
-    const paresSuspeitos: any[] = [];
-    for (let i = 0; i < transactions.length; i++) {
-      for (let j = i + 1; j < transactions.length; j++) {
-        if (Math.abs((transactions[i].amount + transactions[j].amount) - targetDiff) <= 0.05) {
-          paresSuspeitos.push([transactions[i], transactions[j]]);
-        }
-      }
-    }
-
-    // 3. Transações Recentes (Hoje/Ontem)
-    const recentes = transactions.filter(t => isRecent(t.date));
-
-    console.group('%c🔍 CAÇA AO TESOURO: EM BUSCA DOS 30,73€', 'color: #ffffff; background: #f43f5e; padding: 4px 10px; border-radius: 8px; font-weight: bold; font-size: 16px;');
-    console.log(`Saldo Calculado: €${availableBalance.toFixed(2)} | Caixa Real: €1272.65 | Diferença: €${(availableBalance - 1272.65).toFixed(2)}`);
-    
-    if (suspeitosIndividuais.length > 0) {
-      console.group('%c🎯 LANÇAMENTOS INDIVIDUAIS (~30,73€)', 'color: #22c55e; font-weight: bold;');
-      suspeitosIndividuais.forEach(t => console.table([{
-        ID: t.id, Data: formatData(t.date), Desc: t.description, Cat: t.category, Valor: t.amount, Tipo: t.type
-      }]));
-      console.groupEnd();
-    }
-
-    if (paresSuspeitos.length > 0) {
-      console.group('%c👯 PARES QUE SOMAM (~30,73€)', 'color: #3b82f6; font-weight: bold;');
-      paresSuspeitos.forEach(p => console.log(`Par: ${p[0].description} (€${p[0].amount}) + ${p[1].description} (€${p[1].amount}) = €${(p[0].amount + p[1].amount).toFixed(2)}`));
-      console.groupEnd();
-    }
-
-    console.group('%c🕒 LANÇAMENTOS RECENTES (HOJE/ONTEM)', 'color: #a855f7; font-weight: bold;');
-    recentes.forEach(t => console.table([{
-      ID: t.id, Data: formatData(t.date), Desc: t.description, Cat: t.category, Valor: t.amount, Status: t.type
-    }]));
-    console.groupEnd();
-
-    console.groupEnd();
-    // -----------------------------------------------------------
-
     const infantilBalance = infantilInc - infantilExp;
-    const cashOnHand = (availableBalance ?? 0) + (currentRentTotal ?? 0) + (currentEmergencyTotal ?? 0) + (isNaN(infantilBalance) ? 0 : infantilBalance);
+    const churchCashOnHand = (availableBalance ?? 0) + (currentRentTotal ?? 0);
+    const cashOnHand = churchCashOnHand + (isNaN(infantilBalance) ? 0 : infantilBalance);
 
     return { 
       openingBalance: openingBalanceGeral ?? 0,
@@ -323,7 +245,6 @@ const App: React.FC = () => {
       netBalance: cashOnHand ?? 0, 
       fundBalances: {
         ALUGUER: currentRentTotal ?? 0,
-        EMERGENCIA: currentEmergencyTotal ?? 0,
         GERAL: isNaN(availableBalance) ? 0 : (availableBalance ?? 0),
         INFANTIL: isNaN(infantilBalance) ? 0 : infantilBalance
       },
@@ -365,8 +286,8 @@ const App: React.FC = () => {
             Categoria: t.category,
             Valor: t.amount,
             Fundo_Renda: t.fundAllocations.ALUGUER,
-            Fundo_Emergencia: t.fundAllocations.EMERGENCIA,
-            Fundo_Geral: t.fundAllocations.GERAL
+            Fundo_Geral: t.fundAllocations.GERAL,
+            Fundo_Infantil: t.fundAllocations.INFANTIL
           }))
         })
       });
@@ -392,31 +313,8 @@ const App: React.FC = () => {
     try {
       await addTransactionToFirestore(tx);
       console.log('Transação salva com sucesso!');
-      
-      // === PERSISTÊNCIA DE SALDOS REAIS (TREASURY) ===
-      
-      // 0. Emergência: Transações explícitas de EMERGENCIA
-      if (tx.category === 'EMERGENCIA') {
-        if (tx.type === 'INCOME') {
-          // INCOME: Adicionar ao fundo de emergência (ex: 10% do dízimo retirado)
-          await incrementEmergencyBalance(tx.amount);
-          console.log(`Adição ao Fundo de Emergência: +€${tx.amount.toFixed(2)}`);
-        } else {
-          // EXPENSE: Remover do fundo de emergência
-          await incrementEmergencyBalance(-tx.amount);
-          console.log(`Saída do Fundo de Emergência: -€${tx.amount.toFixed(2)}`);
-        }
-        return; // Não processar outras lógicas para EMERGENCIA
-      }
-      
-      // 0.5. NOVO: Desconto automático de 10% para emergência em DÍZIMOS
-      if (tx.type === 'INCOME' && tx.category === 'DIZIMO') {
-        const emergencyAmount = tx.amount * 0.10; // 10% do dízimo
-        await incrementEmergencyBalance(emergencyAmount);
-        console.log(`🚨 Desconto de Emergência (10% de Dízimo): +€${emergencyAmount.toFixed(2)}`);
-      }
-      
-      // 1. Reserva de Renda: Alocação Automática
+
+      // Reserva de Renda: Alocação Automática
       if (tx.type === 'INCOME' && tx.category !== 'INFANTIL' && tx.category !== 'ALOCACAO_RENDA') {
         const currentRent = treasurySummary.rentReserveBalance;
         const missing = Math.max(0, config.rentTarget - currentRent);
@@ -427,13 +325,13 @@ const App: React.FC = () => {
         }
       }
       
-      // 3. Reserva de Renda: Alocação Manual (Completa Reserva)
+      // Reserva de Renda: Alocação Manual
       if (tx.category === 'ALOCACAO_RENDA') {
         await incrementRentReserveBalance(tx.amount);
         console.log(`Alocação Manual de Renda: €${tx.amount.toFixed(2)}`);
       }
       
-      // 4. Reserva de Renda: Despesa de Renda (Baixa na reserva)
+      // Reserva de Renda: Despesa de Renda
       if (tx.category === 'RENDA' && tx.type === 'EXPENSE') {
         await incrementRentReserveBalance(-tx.amount);
         console.log(`Baixa de Reserva por Pagamento: -€${tx.amount.toFixed(2)}`);
@@ -466,33 +364,9 @@ const App: React.FC = () => {
     }
 
     try {
-      // 1. Remover do Firestore
       await deleteTransactionFromFirestore(tx.id);
-      
-      // 2. Reverter impact no Treasury persistent balance
-      
-      // Reverter Emergência: Transações explícitas de EMERGENCIA
-      if (tx.category === 'EMERGENCIA') {
-        if (tx.type === 'INCOME') {
-          await incrementEmergencyBalance(-tx.amount);
-        } else {
-          await incrementEmergencyBalance(tx.amount);
-        }
-      }
-      
-      // Reverter desconto automático de 10% de DÍZIMO para emergência
-      if (tx.type === 'INCOME' && tx.category === 'DIZIMO') {
-        const emergencyAmount = tx.amount * 0.10;
-        await incrementEmergencyBalance(-emergencyAmount);
-        console.log(`🚨 Reversão de Desconto de Emergência (10%): -€${emergencyAmount.toFixed(2)}`);
-      }
-      
-      // Reverter Reserva de Renda
+
       if (tx.type === 'INCOME' && tx.category !== 'INFANTIL' && tx.category !== 'ALOCACAO_RENDA') {
-        // Para reverter auto-alocação é complexo porque não sabemos quanto foi alocado na época
-        // Por simplicidade, recalculamos se for deletado, ou apenas avisamos.
-        // Mas podemos tentar: se o saldo atual for > 0, tentamos remover o que puder.
-        // Na verdade, o melhor é recalcular o saldo persistente se houver deleções importantes.
         console.warn('Deleção de entrada: Recomenda-se clicar em "Recalcular Alocações" para garantir precisão do saldo persistente.');
       }
       
@@ -528,7 +402,7 @@ const App: React.FC = () => {
       totalIncome: stats.totalIncome ?? 0,
       totalExpenses: stats.totalExpenses ?? 0,
       netBalance: stats.netBalance ?? 0,
-      fundBalances: stats.fundBalances ?? { ALUGUER: 0, EMERGENCIA: 0, GERAL: 0, INFANTIL: 0 },
+      fundBalances: stats.fundBalances ?? { ALUGUER: 0, GERAL: 0, INFANTIL: 0 },
       infantilIncome: stats.infantilIncome ?? 0,
       infantilExpenses: stats.infantilExpenses ?? 0,
       generatedBy: user.email || undefined,
@@ -537,17 +411,8 @@ const App: React.FC = () => {
     
     try {
       await saveReportHistory(report);
-      
-      // Atualizar o saldo inicial de emergência para o próximo período
-      // O saldo de emergência atual passa a ser o saldo inicial
-      const novoConfig = {
-        ...config,
-        emergencyInitialBalance: stats.fundBalances.EMERGENCIA
-      };
-      await saveConfig(novoConfig);
-      setConfig(novoConfig);
-      
-      alert('✅ Relatório salvo no histórico com sucesso!\n\nO saldo de emergência foi atualizado para €' + stats.fundBalances.EMERGENCIA.toFixed(2));
+
+      alert('✅ Relatório salvo no histórico com sucesso!');
     } catch (error) {
       console.error('Erro ao salvar relatório:', error);
       alert('Erro ao salvar relatório no histórico.');
@@ -624,7 +489,6 @@ const App: React.FC = () => {
       category: 'ALOCACAO_RENDA' as any,
       fundAllocations: {
         ALUGUER: valorTransferir,
-        EMERGENCIA: 0,
         GERAL: -valorTransferir,
         INFANTIL: 0,
       }
@@ -638,10 +502,26 @@ const App: React.FC = () => {
     }
   };
 
-  const resetData = () => {
-    if (confirm("Deseja realmente apagar todos os lançamentos locais? Esta ação não afetará sua planilha do Google se você já tiver sincronizado.")) {
+  const resetData = async () => {
+    const step1 = confirm('Isso vai apagar TODOS os lançamentos e snapshots no Firebase e no navegador. Deseja continuar?');
+    if (!step1) return;
+
+    const step2 = prompt('Para confirmar, digite REINICIAR');
+    if (step2 !== 'REINICIAR') {
+      alert('Reset cancelado.');
+      return;
+    }
+
+    try {
+      await resetAllFinancialData(defaultConfig);
       setTransactions([]);
-      localStorage.removeItem('gestao_a_mesa_data');
+      setReportsHistory([]);
+      setTreasurySummary({ rentReserveBalance: 0, updatedAt: new Date().toISOString() });
+      setConfig(defaultConfig);
+      alert('✅ Sistema reiniciado com sucesso. Você está começando do zero com cálculos limpos.');
+    } catch (error) {
+      console.error('Erro ao resetar dados:', error);
+      alert('Erro ao resetar os dados no Firebase. Verifique sua conexão e permissões.');
     }
   };
 
@@ -728,7 +608,7 @@ const App: React.FC = () => {
   const recalcularAlocacoes = async () => {
     if (!confirm(`RECALCULAR TODAS AS ALOCAÇÕES\n\n` +
       `Meta de Renda: €${config.rentTarget}\n` +
-      `Percentagens: Emergência ${config.fundPercentages.EMERGENCIA}%, Geral ${config.fundPercentages.GERAL}%\n\n` +
+      `Regra: Entrada da igreja preenche reserva; excedente fica no saldo geral\n\n` +
       `Isso vai redistribuir todas as entradas corretamente.\nContinuar?`)) {
       return;
     }
@@ -767,7 +647,7 @@ const App: React.FC = () => {
 
       const val = tx.amount;
       let newAllocations: Record<FundType, number> = {
-        ALUGUER: 0, EMERGENCIA: 0, GERAL: 0, INFANTIL: 0
+        ALUGUER: 0, GERAL: 0, INFANTIL: 0
       };
 
       // Verificar quanto falta para completar a meta na reserva de renda
@@ -780,16 +660,12 @@ const App: React.FC = () => {
         
         const remaining = val - rentaAllocation;
         if (remaining > 0) {
-          const totalOtherPercentages = config.fundPercentages.EMERGENCIA + config.fundPercentages.GERAL;
-          newAllocations.EMERGENCIA = remaining * (config.fundPercentages.EMERGENCIA / totalOtherPercentages);
-          newAllocations.GERAL = remaining * (config.fundPercentages.GERAL / totalOtherPercentages);
+          newAllocations.GERAL = remaining;
         }
         console.log(`ENTRADA ${tx.description}: €${val} -> Renda: €${rentaAllocation.toFixed(2)}, Outros: €${(val - rentaAllocation).toFixed(2)}`);
       } else {
-        // Meta atingida - distribui tudo entre os outros fundos
-        const totalOtherPercentages = config.fundPercentages.EMERGENCIA + config.fundPercentages.GERAL;
-        newAllocations.EMERGENCIA = val * (config.fundPercentages.EMERGENCIA / totalOtherPercentages);
-        newAllocations.GERAL = val * (config.fundPercentages.GERAL / totalOtherPercentages);
+        // Meta atingida - tudo para o fundo geral
+        newAllocations.GERAL = val;
         console.log(`ENTRADA ${tx.description}: €${val} -> META ATINGIDA, tudo para outros fundos`);
       }
 
@@ -823,10 +699,9 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <SummaryCard icon={<Wallet size={24} />} title="Saldo Disponível" value={formatCurrency(stats.fundBalances.GERAL)} color="blue" />
         <SummaryCard icon={<TrendingUp size={24} />} title="Entradas Igreja" value={formatCurrency(stats.totalIncome)} color="emerald" />
-        <SummaryCard icon={<Landmark size={24} />} title="Emergência" value={formatCurrency(stats.fundBalances.EMERGENCIA)} color="red" />
         
         {/* Card especial da Reserva Renda com botão para completar */}
         <div className="bg-white p-5 rounded-3xl shadow-sm border border-amber-100 hover:shadow-md transition-all">
@@ -1244,9 +1119,8 @@ const App: React.FC = () => {
                 <p className="font-bold text-blue-800 mb-2">💰 Como o dinheiro é distribuído:</p>
                 <ol className="text-sm text-blue-700 space-y-2 list-decimal list-inside">
                   <li><strong>Reserva de Renda</strong> - Preenche até €{config.rentTarget} (3x renda mensal)</li>
-                  <li><strong>Fundo de Emergência</strong> - 10% de cada entrada</li>
-                  <li><strong>Água/Luz/TV</strong> - 10% de cada entrada</li>
-                  <li><strong>Saldo Disponível</strong> - O restante (80%) fica disponível</li>
+                  <li><strong>Saldo Disponível</strong> - O restante fica no fundo geral</li>
+                  <li><strong>Ministério Infantil</strong> - Entradas e saídas ficam 100% no infantil</li>
                 </ol>
                 <p className="text-xs text-blue-600 mt-3">* Ministério Infantil é 100% separado</p>
               </div>
@@ -1279,8 +1153,8 @@ const App: React.FC = () => {
                <CheckCircle2 size={18} />
                <span>Configurações salvas automaticamente</span>
              </div>
-             <button onClick={resetData} className="w-full py-3 text-red-500 font-bold hover:bg-red-50 rounded-xl transition-all flex items-center justify-center gap-2 border border-transparent hover:border-red-100">
-               <Trash2 size={16} /> Limpar Todos os Lançamentos Locais
+             <button onClick={resetData} className="w-full py-3 text-red-600 font-bold hover:bg-red-50 rounded-xl transition-all flex items-center justify-center gap-2 border border-red-100">
+               <Trash2 size={16} /> Reiniciar Tudo (Local + Firebase)
              </button>
           </div>
         </div>

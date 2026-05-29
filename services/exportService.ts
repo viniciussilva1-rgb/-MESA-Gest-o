@@ -18,9 +18,8 @@ export const exportToExcel = (
     'Categoria': tx.category,
     'Valor (€)': tx.amount,
     'Fundo Renda': tx.fundAllocations.ALUGUER || 0,
-    'Fundo Emergência': tx.fundAllocations.EMERGENCIA || 0,
-    'Fundo Água/Luz': tx.fundAllocations.UTILIDADES || 0,
     'Fundo Geral': tx.fundAllocations.GERAL || 0,
+    'Fundo Infantil': tx.fundAllocations.INFANTIL || 0,
     'Referência': tx.invoiceRef || ''
   }));
 
@@ -34,9 +33,8 @@ export const exportToExcel = (
     { wch: 15 }, // Categoria
     { wch: 12 }, // Valor
     { wch: 14 }, // Fundo Renda
-    { wch: 16 }, // Fundo Emergência
-    { wch: 14 }, // Fundo Água/Luz
     { wch: 12 }, // Fundo Geral
+    { wch: 12 }, // Fundo Infantil
     { wch: 15 }, // Referência
   ];
 
@@ -50,9 +48,8 @@ export const exportToExcel = (
     { 'Indicador': '', 'Valor (€)': '' },
     { 'Indicador': '--- SALDOS POR FUNDO ---', 'Valor (€)': '' },
     { 'Indicador': 'Fundo Renda/Aluguer', 'Valor (€)': stats.fundBalances.ALUGUER },
-    { 'Indicador': 'Fundo Emergência', 'Valor (€)': stats.fundBalances.EMERGENCIA },
-    { 'Indicador': 'Fundo Água/Luz', 'Valor (€)': stats.fundBalances.UTILIDADES },
     { 'Indicador': 'Fundo Geral', 'Valor (€)': stats.fundBalances.GERAL },
+    { 'Indicador': 'Fundo Infantil', 'Valor (€)': stats.fundBalances.INFANTIL },
     { 'Indicador': '', 'Valor (€)': '' },
     { 'Indicador': '--- CONFIGURAÇÕES ---', 'Valor (€)': '' },
     { 'Indicador': 'Nome da Igreja', 'Valor (€)': config.churchName },
@@ -81,7 +78,7 @@ export const exportToExcel = (
 };
 
 export const exportToCSV = (transactions: Transaction[]) => {
-  const headers = ['Data', 'Descrição', 'Tipo', 'Categoria', 'Valor', 'Fundo Renda', 'Fundo Emergência', 'Fundo Água/Luz', 'Fundo Geral', 'Referência'];
+  const headers = ['Data', 'Descrição', 'Tipo', 'Categoria', 'Valor', 'Fundo Renda', 'Fundo Geral', 'Fundo Infantil', 'Referência'];
   
   const rows = transactions.map(tx => [
     new Date(tx.date).toLocaleDateString('pt-PT'),
@@ -90,9 +87,8 @@ export const exportToCSV = (transactions: Transaction[]) => {
     tx.category,
     tx.amount,
     tx.fundAllocations.ALUGUER || 0,
-    tx.fundAllocations.EMERGENCIA || 0,
-    tx.fundAllocations.UTILIDADES || 0,
     tx.fundAllocations.GERAL || 0,
+    tx.fundAllocations.INFANTIL || 0,
     tx.invoiceRef || ''
   ].join(';'));
 
