@@ -967,46 +967,6 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {/* Histórico de Snapshots (Relatórios Fechados) */}
-        {reportsHistory.length > 0 && (
-          <div className="bg-slate-900 p-8 rounded-3xl shadow-xl border border-slate-800 text-white">
-            <h3 className="text-xl font-black mb-6 flex items-center gap-3">
-              <History size={24} className="text-emerald-400" /> Snapshots de Períodos Encerrados
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {[...reportsHistory].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((report, idx) => (
-                <div key={idx} className="bg-white/5 border border-white/10 p-5 rounded-2xl hover:bg-white/10 transition-all">
-                  <div className="flex justify-between items-start mb-4">
-                    <span className="text-[10px] font-black uppercase text-emerald-400 tracking-widest">{new Date(report.date).toLocaleDateString('pt-PT', { month: 'long', year: 'numeric' })}</span>
-                    <span className="bg-emerald-500 text-[8px] font-black px-2 py-0.5 rounded text-white uppercase">Fechado</span>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-slate-400">Saldo Inicial:</span>
-                      <span className="font-bold">{formatCurrency(report.openingBalance || 0)}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-slate-400">Entradas:</span>
-                      <span className="font-bold text-emerald-400">+{formatCurrency(report.totalIncome)}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-slate-400">Saídas:</span>
-                      <span className="font-bold text-red-400">-{formatCurrency(report.totalExpenses)}</span>
-                    </div>
-                    <div className="flex justify-between text-sm border-t border-white/10 pt-2 mt-2">
-                      <span className="text-white font-bold">Saldo Final:</span>
-                      <span className="font-black text-white">{formatCurrency(report.closingBalance || report.fundBalances.GERAL)}</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <p className="mt-6 text-[10px] text-slate-500 italic uppercase tracking-tighter text-center">
-              * Relatórios fechados servem como ponto de partida (Saldo Inicial) para o cálculo do período subsequente.
-            </p>
-          </div>
-        )}
-
         {/* Histórico de Movimentações (Listagem Individual) */}
         <div className="bg-white p-8 rounded-3xl shadow-xl border border-slate-100 print:hidden">
           <h3 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-3">
