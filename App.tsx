@@ -360,6 +360,39 @@ const App: React.FC = () => {
     }
   };
 
+  const handleDeleteAllTransactions = async () => {
+    if (transactions.length === 0) {
+      alert('Não há lançamentos para apagar.');
+      return;
+    }
+
+    const firstConfirm = confirm(
+      `Deseja apagar TODOS os ${transactions.length} lançamentos do Livro de Caixa?\n\nEsta ação não pode ser desfeita.`
+    );
+    if (!firstConfirm) return;
+
+    const secondConfirm = prompt('Digite APAGAR para confirmar a exclusão total dos lançamentos:');
+    if (secondConfirm !== 'APAGAR') {
+      alert('Exclusão cancelada.');
+      return;
+    }
+
+    try {
+      for (const tx of transactions) {
+        await deleteTransactionFromFirestore(tx.id);
+      }
+
+      if (treasurySummary.rentReserveBalance > 0) {
+        await incrementRentReserveBalance(-treasurySummary.rentReserveBalance);
+      }
+
+      alert('✅ Todos os lançamentos foram apagados com sucesso.');
+    } catch (error) {
+      console.error('Erro ao apagar todos os lançamentos:', error);
+      alert('Erro ao apagar lançamentos. Tente novamente.');
+    }
+  };
+
   const formatCurrency = (val: number) => {
     // Garantir que val é sempre um número válido
     const validVal = isNaN(val) || val === undefined || val === null ? 0 : val;
@@ -762,7 +795,15 @@ const App: React.FC = () => {
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 animate-in slide-in-from-bottom-4 duration-500 overflow-hidden">
        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
           <h3 className="text-xl font-bold text-slate-800">Livro de Caixa Ministerial</h3>
-          <button onClick={syncToSheets} className="text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline"><CloudUpload size={14} /> Backup para Planilha</button>
+          <div className="flex items-center gap-4">
+            <button onClick={syncToSheets} className="text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline"><CloudUpload size={14} /> Backup para Planilha</button>
+            <button
+              onClick={handleDeleteAllTransactions}
+              className="text-xs font-bold text-red-600 flex items-center gap-1 hover:underline"
+            >
+              <Trash2 size={14} /> Apagar Tudo
+            </button>
+          </div>
        </div>
        <div className="overflow-x-auto">
           <table className="w-full">
