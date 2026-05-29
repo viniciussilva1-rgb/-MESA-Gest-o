@@ -13,7 +13,6 @@ import {
   updateTransaction as updateTransactionInFirestore,
   deleteTransaction as deleteTransactionFromFirestore,
   saveConfig,
-  migrateFromLocalStorage,
   saveReportHistory,
   subscribeToReportsHistory,
   subscribeTreasurySummary,
@@ -36,7 +35,6 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'TRANSACTIONS' | 'REPORTS' | 'SETTINGS'>('DASHBOARD');
   const [syncStatus, setSyncStatus] = useState<'IDLE' | 'SYNCING' | 'SUCCESS' | 'ERROR'>('IDLE');
   const [isLoadingData, setIsLoadingData] = useState(true);
-  const [migrationStatus, setMigrationStatus] = useState<string>('');
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const reportRef = useRef<HTMLDivElement>(null);
   
@@ -72,29 +70,6 @@ const App: React.FC = () => {
     });
     return () => unsubscribe();
   }, []);
-
-  // Migrar dados do localStorage para Firebase (apenas uma vez, após login)
-  useEffect(() => {
-    if (!user) return;
-    
-    const checkAndMigrate = async () => {
-      const hasLocalData = localStorage.getItem('gestao_a_mesa_data') || localStorage.getItem('gestao_a_mesa_config');
-      if (hasLocalData) {
-        try {
-          setMigrationStatus('Migrando dados para a nuvem...');
-          const result = await migrateFromLocalStorage();
-          if (result.transactions > 0 || result.config) {
-            setMigrationStatus(`✅ Migração concluída! ${result.transactions} transações migradas.`);
-            setTimeout(() => setMigrationStatus(''), 5000);
-          }
-        } catch (error) {
-          console.error('Erro na migração:', error);
-          // Erro silencioso - não exibir para o usuário
-        }
-      }
-    };
-    checkAndMigrate();
-  }, [user]);
 
   // Escutar transações do Firebase em tempo real (apenas após login)
   useEffect(() => {
@@ -1228,12 +1203,6 @@ const App: React.FC = () => {
              <button className="p-2.5 bg-slate-100 text-slate-500 rounded-xl hover:bg-slate-200 transition-colors"><Bell size={20} /></button>
           </div>
         </header>
-
-        {migrationStatus && (
-          <div className="mx-6 mt-4 p-4 bg-blue-50 border border-blue-200 rounded-xl text-sm font-bold text-blue-700 flex items-center gap-2">
-            <Database size={18} /> {migrationStatus}
-          </div>
-        )}
 
         {isLoadingData ? (
           <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
