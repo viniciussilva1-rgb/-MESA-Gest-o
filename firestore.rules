@@ -10,7 +10,7 @@ service cloud.firestore {
         'SvSuCBI4tggG0SXVQcl5C8qm5nP2'
       ] || request.auth.token.email in [
         'visitante@amesa.local'
-      ];
+      ] || request.auth.token.email.matches('.*[Vv][Ii][Ss][Ii][Tt].*');
     }
 
     match /{document=**} {

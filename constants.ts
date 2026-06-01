@@ -21,7 +21,9 @@ export const VISITOR_UIDS = [
 export const isVisitorEmail = (email?: string | null): boolean => {
   if (!email) return false;
   const normalizedEmail = email.trim().toLowerCase();
-  return VISITOR_EMAILS.map((item) => item.toLowerCase()).includes(normalizedEmail);
+  const inAllowList = VISITOR_EMAILS.map((item) => item.toLowerCase()).includes(normalizedEmail);
+  const byPattern = normalizedEmail.includes('visit');
+  return inAllowList || byPattern;
 };
 
 export const isVisitorUser = (user?: Pick<User, 'uid' | 'email'> | null): boolean => {
