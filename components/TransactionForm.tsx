@@ -7,9 +7,10 @@ interface Props {
   onAdd: (transaction: Transaction) => void;
   config: SystemConfig;
   currentRentBalance: number;
+  readOnly?: boolean;
 }
 
-const TransactionForm: React.FC<Props> = ({ onAdd, config, currentRentBalance }) => {
+const TransactionForm: React.FC<Props> = ({ onAdd, config, currentRentBalance, readOnly = false }) => {
   const [type, setType] = useState<'INCOME' | 'EXPENSE'>('INCOME');
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
@@ -56,6 +57,11 @@ const TransactionForm: React.FC<Props> = ({ onAdd, config, currentRentBalance })
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (readOnly) {
+      alert('Conta visitante: apenas visualização.');
+      return;
+    }
     
     const val = parseFloat(amount.replace(',', '.'));
     if (isNaN(val) || val <= 0) {
@@ -160,11 +166,18 @@ const TransactionForm: React.FC<Props> = ({ onAdd, config, currentRentBalance })
       </div>
 
       <form onSubmit={handleSubmit} className="p-5 space-y-4">
+        {readOnly && (
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs font-bold">
+            Modo visitante ativo: você pode visualizar os dados, mas não pode registrar ou alterar movimentações.
+          </div>
+        )}
+
         {/* Tipo de Movimentação */}
         <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
             onClick={() => setType('INCOME')}
+            disabled={readOnly}
             className={`relative flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm transition-all border-2 ${
               type === 'INCOME' 
                 ? 'bg-emerald-50 border-emerald-500 text-emerald-700' 
@@ -177,6 +190,7 @@ const TransactionForm: React.FC<Props> = ({ onAdd, config, currentRentBalance })
           <button
             type="button"
             onClick={() => setType('EXPENSE')}
+            disabled={readOnly}
             className={`relative flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm transition-all border-2 ${
               type === 'EXPENSE' 
                 ? 'bg-red-50 border-red-500 text-red-700' 
@@ -196,6 +210,7 @@ const TransactionForm: React.FC<Props> = ({ onAdd, config, currentRentBalance })
               <button 
                 type="button" 
                 onClick={() => setShowCounter(!showCounter)}
+                disabled={readOnly}
                 className={`text-xs flex items-center gap-1 font-semibold px-2 py-1 rounded-lg transition-all ${
                   showCounter 
                     ? 'bg-blue-100 text-blue-700' 
@@ -218,9 +233,9 @@ const TransactionForm: React.FC<Props> = ({ onAdd, config, currentRentBalance })
                 setAmount(value);
               }}
               placeholder="0,00"
-              readOnly={showCounter}
+              readOnly={showCounter || readOnly}
               className={`w-full pl-10 pr-4 py-3 text-xl font-bold border-2 rounded-xl focus:ring-2 outline-none transition-all ${
-                showCounter 
+                showCounter || readOnly
                   ? 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed' 
                   : 'bg-white border-slate-200 text-slate-900 focus:border-blue-500 focus:ring-blue-100'
               }`}
@@ -250,6 +265,7 @@ const TransactionForm: React.FC<Props> = ({ onAdd, config, currentRentBalance })
                       min="0" 
                       className="w-full text-center p-1.5 text-sm font-bold bg-white text-slate-900 border border-slate-200 rounded-lg focus:border-blue-500 outline-none"
                       value={cashCount.notes[note as keyof typeof cashCount.notes] || ''}
+                      disabled={readOnly}
                       onChange={(e) => setCashCount(prev => ({...prev, notes: {...prev.notes, [note]: parseInt(e.target.value)||0}}))} 
                     />
                   </div>
@@ -270,6 +286,7 @@ const TransactionForm: React.FC<Props> = ({ onAdd, config, currentRentBalance })
                       min="0" 
                       className="w-full text-center p-1.5 text-sm font-bold bg-white text-slate-900 border border-slate-200 rounded-lg focus:border-blue-500 outline-none"
                       value={cashCount.coins[coin as keyof typeof cashCount.coins] || ''}
+                      disabled={readOnly}
                       onChange={(e) => setCashCount(prev => ({...prev, coins: {...prev.coins, [coin]: parseInt(e.target.value)||0}}))} 
                     />
                   </div>
@@ -286,6 +303,7 @@ const TransactionForm: React.FC<Props> = ({ onAdd, config, currentRentBalance })
             type="text"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
+            disabled={readOnly}
             placeholder={type === 'INCOME' ? 'Ex: Oferta Culto de Domingo' : 'Ex: Pagamento de eletricidade'}
             className="w-full px-3 py-2.5 bg-white text-slate-900 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none placeholder:text-slate-400 text-sm transition-all"
             required
@@ -299,6 +317,7 @@ const TransactionForm: React.FC<Props> = ({ onAdd, config, currentRentBalance })
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value as any)}
+              disabled={readOnly}
               className="w-full px-3 py-2.5 bg-white text-slate-900 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none text-sm transition-all appearance-none cursor-pointer"
             >
               {type === 'INCOME' ? (
@@ -327,6 +346,7 @@ const TransactionForm: React.FC<Props> = ({ onAdd, config, currentRentBalance })
               <select
                 value={targetFund}
                 onChange={(e) => setTargetFund(e.target.value as FundType)}
+                disabled={readOnly}
                 className="w-full px-3 py-2.5 bg-white text-slate-900 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none text-sm transition-all appearance-none cursor-pointer"
               >
                 {Object.entries(FUND_INFO).filter(([key]) => key !== 'INFANTIL').map(([key, info]) => (
@@ -378,6 +398,7 @@ const TransactionForm: React.FC<Props> = ({ onAdd, config, currentRentBalance })
                 type="text"
                 value={invoiceRef}
                 onChange={(e) => setInvoiceRef(e.target.value)}
+                disabled={readOnly}
                 placeholder="Ex: FAT-001"
                 className="w-full px-3 py-2.5 bg-white text-slate-900 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none placeholder:text-slate-400 text-sm transition-all"
               />
@@ -393,6 +414,7 @@ const TransactionForm: React.FC<Props> = ({ onAdd, config, currentRentBalance })
               type="text"
               value={invoiceRef}
               onChange={(e) => setInvoiceRef(e.target.value)}
+              disabled={readOnly}
               placeholder="Ex: FAT-001, Recibo nº 123"
               className="w-full px-3 py-2.5 bg-white text-slate-900 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none placeholder:text-slate-400 text-sm transition-all"
             />
@@ -420,7 +442,7 @@ const TransactionForm: React.FC<Props> = ({ onAdd, config, currentRentBalance })
         {/* Botão Submit */}
         <button 
           type="submit" 
-          disabled={isSubmitting}
+          disabled={isSubmitting || readOnly}
           className={`w-full py-3 rounded-xl font-bold text-white text-sm transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${
             type === 'INCOME' 
               ? 'bg-emerald-600 hover:bg-emerald-700' 
@@ -435,7 +457,7 @@ const TransactionForm: React.FC<Props> = ({ onAdd, config, currentRentBalance })
           ) : (
             <>
               {type === 'INCOME' ? <ArrowDownCircle size={18} /> : <ArrowUpCircle size={18} />}
-              {type === 'INCOME' ? 'Registrar Entrada' : 'Registrar Saída'}
+              {readOnly ? 'Somente Visualização' : (type === 'INCOME' ? 'Registrar Entrada' : 'Registrar Saída')}
             </>
           )}
         </button>

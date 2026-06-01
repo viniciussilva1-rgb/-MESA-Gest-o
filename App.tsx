@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { User } from 'firebase/auth';
 import { Transaction, FinancialStats, FundType, SystemConfig, ReportHistory } from './types';
-import { FUND_INFO } from './constants';
+import { FUND_INFO, isVisitorEmail } from './constants';
 import TransactionForm from './components/TransactionForm';
 import DashboardCharts from './components/DashboardCharts';
 import LoginScreen from './components/LoginScreen';
@@ -31,6 +31,8 @@ import {
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
+  const isVisitor = useMemo(() => isVisitorEmail(user?.email), [user?.email]);
+  const canEdit = !!user && !isVisitor;
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'TRANSACTIONS' | 'REPORTS' | 'SETTINGS'>('DASHBOARD');
   const [syncStatus, setSyncStatus] = useState<'IDLE' | 'SYNCING' | 'SUCCESS' | 'ERROR'>('IDLE');
@@ -70,6 +72,12 @@ const App: React.FC = () => {
     });
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (isVisitor && activeTab === 'SETTINGS') {
+      setActiveTab('DASHBOARD');
+    }
+  }, [isVisitor, activeTab]);
 
   // Escutar transações do Firebase em tempo real (apenas após login)
   useEffect(() => {
@@ -137,14 +145,22 @@ const App: React.FC = () => {
 
   // Salvar configurações automaticamente quando mudam (após carregamento inicial)
   useEffect(() => {
-    if (!user || !configLoaded) return;
+    if (!user || !configLoaded || isVisitor) return;
     
     const timeoutId = setTimeout(() => {
       saveConfig(config).catch(err => console.error('Erro ao salvar config:', err));
     }, 1000); // Aguarda 1 segundo para não salvar a cada tecla
     
     return () => clearTimeout(timeoutId);
-  }, [config, user, configLoaded]);
+  }, [config, user, configLoaded, isVisitor]);
+
+  const assertCanEdit = () => {
+    if (!canEdit) {
+      alert('Conta visitante: apenas visualização.');
+      return false;
+    }
+    return true;
+  };
 
   const handleLogout = async () => {
     if (confirm('Deseja realmente sair do sistema?')) {
@@ -239,6 +255,8 @@ const App: React.FC = () => {
   }, [stats]);
 
   const syncToSheets = async () => {
+    if (!assertCanEdit()) return;
+
     if (!config.sheetsUrl) {
       alert("Por favor, configure o URL da planilha nas Definições primeiro.");
       setActiveTab('SETTINGS');
@@ -277,6 +295,11 @@ const App: React.FC = () => {
   };
 
   const handleAddTransaction = async (tx: Transaction) => {
+    if (!canEdit) {
+      alert('Conta visitante: apenas visualização.');
+      throw new Error('Sem permissão para criar transações.');
+    }
+
     console.log('Tentando salvar transação:', tx);
     console.log('Usuário autenticado:', user?.email);
     
@@ -324,6 +347,8 @@ const App: React.FC = () => {
   };
 
   const handleSaveConfig = async (newConfig: SystemConfig) => {
+    if (!assertCanEdit()) return;
+
     try {
       await saveConfig(newConfig);
       setConfig(newConfig);
@@ -334,6 +359,8 @@ const App: React.FC = () => {
   };
 
   const handleDeleteTransaction = async (tx: Transaction) => {
+    if (!assertCanEdit()) return;
+
     if (!confirm(`Deseja realmente cancelar esta movimentação?\n\n${tx.description}\n€${tx.amount.toFixed(2)}`)) {
       return;
     }
@@ -361,6 +388,8 @@ const App: React.FC = () => {
   };
 
   const handleDeleteAllTransactions = async () => {
+    if (!assertCanEdit()) return;
+
     if (transactions.length === 0) {
       alert('Não há lançamentos para apagar.');
       return;
@@ -401,7 +430,7 @@ const App: React.FC = () => {
 
   // Função para salvar relatório no histórico
   const salvarRelatorioHistorico = async () => {
-    if (!user) return;
+    if (!user || !assertCanEdit()) return;
     
     const report: ReportHistory = {
       date: new Date().toISOString(),
@@ -455,7 +484,7 @@ const App: React.FC = () => {
       pdf.save(nomeArquivo);
       
       // Perguntar se deseja salvar no histórico
-      if (confirm('Deseja salvar este relatório no histórico para consultas futuras?')) {
+      if (canEdit && confirm('Deseja salvar este relatório no histórico para consultas futuras?')) {
         await salvarRelatorioHistorico();
       }
       
@@ -469,6 +498,8 @@ const App: React.FC = () => {
 
   // Função para completar a reserva de renda usando o saldo disponível
   const completarReservaRenda = async () => {
+    if (!assertCanEdit()) return;
+
     const faltaParaMeta = config.rentTarget - stats.fundBalances.ALUGUER;
     const saldoDisponivel = stats.fundBalances.GERAL;
     
@@ -511,6 +542,8 @@ const App: React.FC = () => {
   };
 
   const resetData = async () => {
+    if (!assertCanEdit()) return;
+
     const step1 = confirm('Isso vai apagar TODOS os lançamentos e snapshots no Firebase e no navegador. Deseja continuar?');
     if (!step1) return;
 
@@ -535,6 +568,8 @@ const App: React.FC = () => {
 
   // Função para remover transações duplicadas
   const removerDuplicados = async () => {
+    if (!assertCanEdit()) return;
+
     // Agrupar transações por chave única (descrição + valor + categoria + tipo)
     const grupos: Record<string, Transaction[]> = {};
     
@@ -584,6 +619,8 @@ const App: React.FC = () => {
 
   // Função para limpar TODAS transações internas (reposições e transferências)
   const limparTransferenciasInternas = async () => {
+    if (!assertCanEdit()) return;
+
     const transferencias = transactions.filter(tx => 
       tx.description.toLowerCase().includes('reposição automática') ||
       tx.description.toLowerCase().includes('transferência')
@@ -614,6 +651,8 @@ const App: React.FC = () => {
 
   // Função para recalcular alocações de todas as transações com as percentagens atuais
   const recalcularAlocacoes = async () => {
+    if (!assertCanEdit()) return;
+
     if (!confirm(`RECALCULAR TODAS AS ALOCAÇÕES\n\n` +
       `Meta de Renda: €${config.rentTarget}\n` +
       `Regra: Entrada da igreja preenche reserva; excedente fica no saldo geral\n\n` +
@@ -707,6 +746,12 @@ const App: React.FC = () => {
         </div>
       </div>
 
+      {isVisitor && (
+        <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-amber-800 text-sm font-bold">
+          Você está no modo visitante: visualização liberada, alterações bloqueadas.
+        </div>
+      )}
+
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <SummaryCard icon={<Wallet size={24} />} title="Saldo Disponível" value={formatCurrency(stats.fundBalances.GERAL)} color="blue" />
         <SummaryCard icon={<TrendingUp size={24} />} title="Entradas Igreja" value={formatCurrency(stats.totalIncome)} color="emerald" />
@@ -720,7 +765,7 @@ const App: React.FC = () => {
           <h3 className="text-2xl font-black text-slate-900 tracking-tighter">{formatCurrency(stats.fundBalances.ALUGUER)}</h3>
           <p className="text-xs text-slate-500 mt-1">Meta: {formatCurrency(config.rentTarget)}</p>
           
-          {stats.fundBalances.ALUGUER < config.rentTarget && stats.fundBalances.GERAL > 0 && (
+          {canEdit && stats.fundBalances.ALUGUER < config.rentTarget && stats.fundBalances.GERAL > 0 && (
             <button
               onClick={completarReservaRenda}
               className="mt-3 w-full py-2 px-3 bg-amber-100 hover:bg-amber-200 text-amber-800 text-xs font-bold rounded-xl transition-all"
@@ -777,7 +822,7 @@ const App: React.FC = () => {
       </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <TransactionForm onAdd={handleAddTransaction} config={config} currentRentBalance={stats.fundBalances.ALUGUER} />
+        <TransactionForm onAdd={handleAddTransaction} config={config} currentRentBalance={stats.fundBalances.ALUGUER} readOnly={!canEdit} />
         <FundDistribution stats={stats} />
       </div>
 
@@ -787,6 +832,7 @@ const App: React.FC = () => {
         transactions={transactions} 
         formatCurrency={formatCurrency} 
         onDelete={handleDeleteTransaction}
+        readOnly={!canEdit}
       />
     </div>
   );
@@ -796,13 +842,17 @@ const App: React.FC = () => {
        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
           <h3 className="text-xl font-bold text-slate-800">Livro de Caixa Ministerial</h3>
           <div className="flex items-center gap-4">
-            <button onClick={syncToSheets} className="text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline"><CloudUpload size={14} /> Backup para Planilha</button>
-            <button
-              onClick={handleDeleteAllTransactions}
-              className="text-xs font-bold text-red-600 flex items-center gap-1 hover:underline"
-            >
-              <Trash2 size={14} /> Apagar Tudo
-            </button>
+            {canEdit && (
+              <>
+                <button onClick={syncToSheets} className="text-xs font-bold text-blue-600 flex items-center gap-1 hover:underline"><CloudUpload size={14} /> Backup para Planilha</button>
+                <button
+                  onClick={handleDeleteAllTransactions}
+                  className="text-xs font-bold text-red-600 flex items-center gap-1 hover:underline"
+                >
+                  <Trash2 size={14} /> Apagar Tudo
+                </button>
+              </>
+            )}
           </div>
        </div>
        <div className="overflow-x-auto">
@@ -813,12 +863,12 @@ const App: React.FC = () => {
                 <th className="px-6 py-4 text-left">Descrição</th>
                 <th className="px-6 py-4 text-left">Categoria</th>
                 <th className="px-6 py-4 text-right">Valor</th>
-                <th className="px-6 py-4 text-center">Ação</th>
+                {canEdit && <th className="px-6 py-4 text-center">Ação</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {transactions.length === 0 ? (
-                <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-400 italic">Nenhum lançamento registrado.</td></tr>
+                <tr><td colSpan={canEdit ? 5 : 4} className="px-6 py-12 text-center text-slate-400 italic">Nenhum lançamento registrado.</td></tr>
               ) : (
                 transactions.map(tx => (
                   <tr key={tx.id} className="hover:bg-slate-50/80 transition-colors">
@@ -835,14 +885,16 @@ const App: React.FC = () => {
                     <td className={`px-6 py-4 text-right font-black text-sm ${tx.type === 'INCOME' ? 'text-emerald-600' : 'text-red-600'}`}>
                       {tx.type === 'INCOME' ? '+' : '-'} {formatCurrency(tx.amount)}
                     </td>
-                    <td className="px-6 py-4 text-center">
-                      <button
-                        onClick={() => handleDeleteTransaction(tx)}
-                        className="px-2 py-1 text-red-600 hover:bg-red-50 rounded-lg transition-colors text-xs font-bold flex items-center gap-1 mx-auto"
-                      >
-                        <Trash2 size={14} /> Cancelar
-                      </button>
-                    </td>
+                    {canEdit && (
+                      <td className="px-6 py-4 text-center">
+                        <button
+                          onClick={() => handleDeleteTransaction(tx)}
+                          className="px-2 py-1 text-red-600 hover:bg-red-50 rounded-lg transition-colors text-xs font-bold flex items-center gap-1 mx-auto"
+                        >
+                          <Trash2 size={14} /> Cancelar
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))
               )}
@@ -907,12 +959,14 @@ const App: React.FC = () => {
               >
                 <FileSpreadsheet size={20} /> Baixar Excel
               </button>
-              <button 
-                onClick={salvarRelatorioHistorico}
-                className="flex items-center gap-2 px-6 py-3 bg-emerald-800 text-white rounded-xl hover:bg-emerald-900 transition-all shadow-lg font-bold"
-              >
-                <History size={20} /> Salvar Snapshot
-              </button>
+              {canEdit && (
+                <button 
+                  onClick={salvarRelatorioHistorico}
+                  className="flex items-center gap-2 px-6 py-3 bg-emerald-800 text-white rounded-xl hover:bg-emerald-900 transition-all shadow-lg font-bold"
+                >
+                  <History size={20} /> Salvar Snapshot
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1040,6 +1094,14 @@ const App: React.FC = () => {
 
   const renderSettings = () => (
     <div className="max-w-3xl mx-auto space-y-8 animate-in slide-in-from-right-4 duration-500">
+      {isVisitor ? (
+        <div className="bg-white p-8 rounded-3xl shadow-sm border border-amber-200">
+          <h3 className="text-xl font-black text-amber-800 mb-3">Acesso Restrito</h3>
+          <p className="text-sm text-amber-700 font-medium">
+            Sua conta está no perfil visitante. As configurações só podem ser alteradas por um administrador.
+          </p>
+        </div>
+      ) : (
       <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-200">
         <h3 className="text-xl font-black text-slate-800 mb-8 border-b border-slate-100 pb-4">Configurações da Igreja</h3>
         <div className="space-y-6">
@@ -1135,6 +1197,7 @@ const App: React.FC = () => {
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 
@@ -1171,13 +1234,16 @@ const App: React.FC = () => {
             <NavBtn active={activeTab === 'DASHBOARD'} onClick={() => setActiveTab('DASHBOARD')} icon={<LayoutDashboard size={20} />} label="Início" />
             <NavBtn active={activeTab === 'TRANSACTIONS'} onClick={() => setActiveTab('TRANSACTIONS')} icon={<History size={20} />} label="Lançamentos" />
             <NavBtn active={activeTab === 'REPORTS'} onClick={() => setActiveTab('REPORTS')} icon={<TrendingUp size={20} />} label="Relatórios" />
-            <NavBtn active={activeTab === 'SETTINGS'} onClick={() => setActiveTab('SETTINGS')} icon={<Settings size={20} />} label="Definições" />
+            {canEdit && <NavBtn active={activeTab === 'SETTINGS'} onClick={() => setActiveTab('SETTINGS')} icon={<Settings size={20} />} label="Definições" />}
           </nav>
         </div>
         <div className="absolute bottom-6 left-6 right-6 space-y-3">
           <div className="bg-white/5 border border-white/10 p-4 rounded-2xl backdrop-blur-sm">
              <p className="text-[10px] uppercase font-black text-slate-500 mb-1 tracking-widest">Usuário Logado</p>
              <div className="text-xs font-bold text-white truncate">{user.email}</div>
+             <div className={`mt-2 text-[10px] font-black uppercase ${isVisitor ? 'text-amber-300' : 'text-emerald-300'}`}>
+               {isVisitor ? 'Perfil: Visitante' : 'Perfil: Administrador'}
+             </div>
           </div>
           <button 
             onClick={handleLogout}
@@ -1198,6 +1264,11 @@ const App: React.FC = () => {
              <div className="text-[10px] font-black text-emerald-600 uppercase flex items-center gap-1 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-100">
                <Database size={14} /> Firebase Conectado
              </div>
+             {isVisitor && (
+               <div className="text-[10px] font-black text-amber-700 uppercase flex items-center gap-1 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-100">
+                 Somente Leitura
+               </div>
+             )}
              {syncStatus === 'SYNCING' && <div className="text-[10px] font-black text-blue-600 animate-pulse uppercase">Gravando na Nuvem...</div>}
              {syncStatus === 'SUCCESS' && <div className="text-[10px] font-black text-emerald-600 uppercase flex items-center gap-1"><CheckCircle2 size={14} /> Salvo no Sheets</div>}
              {syncStatus === 'ERROR' && <div className="text-[10px] font-black text-red-600 uppercase flex items-center gap-1"><AlertCircle size={14} /> Erro de Conexão</div>}
@@ -1284,11 +1355,13 @@ const FundDistribution = ({ stats }: { stats: FinancialStats }) => (
 const RecentTransactions = ({ 
   transactions, 
   formatCurrency, 
-  onDelete 
+  onDelete,
+  readOnly = false
 }: { 
   transactions: Transaction[], 
   formatCurrency: (v: number) => string,
-  onDelete: (tx: Transaction) => void
+  onDelete: (tx: Transaction) => void,
+  readOnly?: boolean
 }) => {
   return (
     <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-200">
@@ -1311,12 +1384,14 @@ const RecentTransactions = ({
               <div className={`text-sm font-black ${tx.type === 'INCOME' ? 'text-emerald-600' : 'text-red-600'}`}>
                 {tx.type === 'INCOME' ? '+' : '-'} {formatCurrency(tx.amount)}
               </div>
-              <button
-                onClick={() => onDelete(tx)}
-                className="px-2 py-1 text-red-600 hover:bg-red-50 rounded-lg transition-colors text-xs font-bold opacity-0 group-hover:opacity-100"
-              >
-                <Trash2 size={14} />
-              </button>
+              {!readOnly && (
+                <button
+                  onClick={() => onDelete(tx)}
+                  className="px-2 py-1 text-red-600 hover:bg-red-50 rounded-lg transition-colors text-xs font-bold opacity-0 group-hover:opacity-100"
+                >
+                  <Trash2 size={14} />
+                </button>
+              )}
             </div>
           </div>
         ))}

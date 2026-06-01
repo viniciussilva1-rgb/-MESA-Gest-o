@@ -42,6 +42,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         {/* Card de Login */}
         <div className="bg-white rounded-3xl p-8 shadow-2xl">
           <h2 className="text-xl font-black text-slate-800 mb-6 text-center">Acesso à Tesouraria</h2>
+          <p className="text-xs text-slate-500 text-center mb-5 font-medium">
+            Contas visitantes têm acesso apenas para visualizar movimentações e relatórios.
+          </p>
           
           <form onSubmit={handleLogin} className="space-y-5">
             <div>
