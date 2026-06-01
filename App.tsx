@@ -1078,7 +1078,7 @@ const App: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-12">
-            <ReportStat label="Saldo Inicial" value={formatCurrency(reportSaldoInicial)} />
+            <ReportStat label="Saldo Disponível" value={formatCurrency(reportSaldoInicial)} />
             <ReportStat label="Entradas (Mês)" value={formatCurrency(stats.totalIncome ?? 0)} />
             <ReportStat label="Saídas/Reservas" value={formatCurrency(stats.totalExpenses ?? 0)} />
             <ReportStat label="Saldo Final Geral" value={formatCurrency(reportSaldoInicial)} highlight />
