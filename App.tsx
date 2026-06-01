@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { User } from 'firebase/auth';
 import { Transaction, FinancialStats, FundType, SystemConfig, ReportHistory } from './types';
-import { FUND_INFO, isVisitorEmail } from './constants';
+import { FUND_INFO, isVisitorUser } from './constants';
 import TransactionForm from './components/TransactionForm';
 import DashboardCharts from './components/DashboardCharts';
 import LoginScreen from './components/LoginScreen';
@@ -31,7 +31,7 @@ import {
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
-  const isVisitor = useMemo(() => isVisitorEmail(user?.email), [user?.email]);
+  const isVisitor = useMemo(() => isVisitorUser(user), [user]);
   const canEdit = !!user && !isVisitor;
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'TRANSACTIONS' | 'REPORTS' | 'SETTINGS'>('DASHBOARD');
@@ -808,15 +808,20 @@ const App: React.FC = () => {
           )}
           <button
             onClick={async () => {
+              if (!canEdit) {
+                alert('Conta visitante: consultoria IA desativada.');
+                return;
+              }
+
               setIsLoadingInsight(true);
               const insight = await getFinancialInsights(stats, transactions.slice(0, 10));
               setAiInsight(insight || 'Análise indisponível.');
               setIsLoadingInsight(false);
             }}
-            disabled={isLoadingInsight}
+            disabled={isLoadingInsight || !canEdit}
             className="px-8 py-4 bg-blue-600 text-white font-bold rounded-2xl hover:bg-blue-500 transition-all shadow-xl active:scale-95 disabled:opacity-50"
           >
-            {isLoadingInsight ? 'Gerando Análise...' : 'Solicitar Consultoria IA'}
+            {!canEdit ? 'Consultoria IA (somente admin)' : (isLoadingInsight ? 'Gerando Análise...' : 'Solicitar Consultoria IA')}
           </button>
         </div>
       </section>

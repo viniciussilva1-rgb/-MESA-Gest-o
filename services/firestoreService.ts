@@ -11,13 +11,24 @@ import {
   setDoc,
   limit
 } from "firebase/firestore";
-import { db } from "./firebase";
+import { auth, db } from "./firebase";
 import { Transaction, SystemConfig, ReportHistory } from "../types";
+import { isVisitorUser } from "../constants";
 
 const TRANSACTIONS_COLLECTION = "transactions";
 const CONFIG_COLLECTION = "config";
 const CONFIG_DOC_ID = "system_config";
 const REPORTS_COLLECTION = "reports_history";
+
+const assertCanWrite = () => {
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    throw new Error('Sem autenticação para escrever dados.');
+  }
+  if (isVisitorUser(currentUser)) {
+    throw new Error('Conta visitante sem permissão de escrita.');
+  }
+};
 
 // ============ TRANSACTIONS ============
 
@@ -43,6 +54,7 @@ export const subscribeToTransactions = (
 
 export const addTransaction = async (transaction: Transaction): Promise<void> => {
   console.log('=== FIRESTORE: Iniciando addTransaction ===');
+  assertCanWrite();
   
   try {
     const { id, ...transactionData } = transaction;
@@ -83,6 +95,7 @@ export const addTransaction = async (transaction: Transaction): Promise<void> =>
 };
 
 export const updateTransaction = async (transactionId: string, data: Partial<Transaction>): Promise<void> => {
+  assertCanWrite();
   try {
     const docRef = doc(db, TRANSACTIONS_COLLECTION, transactionId);
     await updateDoc(docRef, data);
@@ -94,6 +107,7 @@ export const updateTransaction = async (transactionId: string, data: Partial<Tra
 };
 
 export const deleteTransaction = async (transactionId: string): Promise<void> => {
+  assertCanWrite();
   try {
     await deleteDoc(doc(db, TRANSACTIONS_COLLECTION, transactionId));
   } catch (error) {
@@ -117,6 +131,7 @@ export const subscribeToConfig = (callback: (config: SystemConfig | null) => voi
 };
 
 export const saveConfig = async (config: SystemConfig): Promise<void> => {
+  assertCanWrite();
   try {
     await setDoc(doc(db, CONFIG_COLLECTION, CONFIG_DOC_ID), config);
   } catch (error) {
@@ -167,6 +182,7 @@ export const migrateFromLocalStorage = async (): Promise<{ transactions: number;
 // ============ REPORTS HISTORY ============
 
 export const saveReportHistory = async (report: ReportHistory): Promise<string> => {
+  assertCanWrite();
   try {
     const { id, ...reportData } = report;
     const docRef = await addDoc(collection(db, REPORTS_COLLECTION), {
@@ -246,6 +262,7 @@ export const subscribeTreasurySummary = (
 };
 
 export const incrementRentReserveBalance = async (amount: number): Promise<void> => {
+  assertCanWrite();
   try {
     const summaryRef = doc(db, TREASURY_COLLECTION, TREASURY_SUMMARY_DOC);
     const snapshot = await getDocs(query(collection(db, TREASURY_COLLECTION)));
@@ -277,6 +294,7 @@ const deleteCollectionDocs = async (collectionName: string): Promise<void> => {
 };
 
 export const resetAllFinancialData = async (defaultConfig: SystemConfig): Promise<void> => {
+  assertCanWrite();
   try {
     await deleteCollectionDocs(TRANSACTIONS_COLLECTION);
     await deleteCollectionDocs(REPORTS_COLLECTION);

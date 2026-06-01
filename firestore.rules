@@ -6,7 +6,9 @@ service cloud.firestore {
     }
 
     function isVisitor() {
-      return request.auth.token.email in [
+      return request.auth.uid in [
+        'SvSuCBI4tggG0SXVQcl5C8qm5nP2'
+      ] || request.auth.token.email in [
         'visitante@amesa.local'
       ];
     }
