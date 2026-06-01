@@ -511,14 +511,14 @@ const App: React.FC = () => {
     
     const report: ReportHistory = {
       date: new Date().toISOString(),
-      openingBalance: stats.openingBalance ?? 0,
-      closingBalance: stats.fundBalances?.GERAL ?? 0,
+      openingBalance: dashboardStats.fundBalances?.GERAL ?? 0,
+      closingBalance: dashboardStats.fundBalances?.GERAL ?? 0,
       totalIncome: stats.totalIncome ?? 0,
       totalExpenses: stats.totalExpenses ?? 0,
-      netBalance: stats.netBalance ?? 0,
-      fundBalances: stats.fundBalances ?? { ALUGUER: 0, GERAL: 0, INFANTIL: 0 },
-      infantilIncome: stats.infantilIncome ?? 0,
-      infantilExpenses: stats.infantilExpenses ?? 0,
+      netBalance: dashboardStats.netBalance ?? 0,
+      fundBalances: dashboardStats.fundBalances ?? { ALUGUER: 0, GERAL: 0, INFANTIL: 0 },
+      infantilIncome: dashboardStats.infantilIncome ?? 0,
+      infantilExpenses: dashboardStats.infantilExpenses ?? 0,
       generatedBy: user.email || undefined,
       createdAt: new Date().toISOString()
     };
@@ -1022,6 +1022,14 @@ const App: React.FC = () => {
       };
     });
 
+    // Regra do relatório solicitada:
+    // Saldo Inicial = Entradas - Saídas - Reserva de Renda (sem Infantil)
+    // Caixa Total = Saldo Inicial + Reserva de Renda + Infantil
+    const reportSaldoInicial = dashboardStats.fundBalances.GERAL ?? 0;
+    const reportReservaRenda = dashboardStats.fundBalances.ALUGUER ?? 0;
+    const reportInfantil = dashboardStats.fundBalances.INFANTIL ?? 0;
+    const reportCaixaTotal = reportSaldoInicial + reportReservaRenda + reportInfantil;
+
     return (
       <div className="space-y-8 animate-in zoom-in-95 duration-500 print:bg-white print:p-0">
         {/* Botões de Exportação */}
@@ -1070,25 +1078,25 @@ const App: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-12">
-            <ReportStat label="Saldo Inicial" value={formatCurrency(stats.openingBalance ?? 0)} />
+            <ReportStat label="Saldo Inicial" value={formatCurrency(reportSaldoInicial)} />
             <ReportStat label="Entradas (Mês)" value={formatCurrency(stats.totalIncome ?? 0)} />
             <ReportStat label="Saídas/Reservas" value={formatCurrency(stats.totalExpenses ?? 0)} />
-            <ReportStat label="Saldo Final Geral" value={formatCurrency(stats.fundBalances?.GERAL ?? 0)} highlight />
-            <ReportStat label="Caixa Total" value={formatCurrency(stats.netBalance ?? 0)} />
+            <ReportStat label="Saldo Final Geral" value={formatCurrency(reportSaldoInicial)} highlight />
+            <ReportStat label="Caixa Total" value={formatCurrency(reportCaixaTotal)} />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
             <div>
               <h3 className="text-sm font-black text-slate-900 mb-8 uppercase tracking-widest border-l-4 border-slate-900 pl-4">Separação de Verbas por Fundo</h3>
               <div className="space-y-6">
-                  {Object.entries(stats.fundBalances ?? {}).filter(([fund]) => fund !== 'GERAL').map(([fund, balance]) => (
+                  {Object.entries(dashboardStats.fundBalances ?? {}).filter(([fund]) => fund !== 'GERAL').map(([fund, balance]) => (
                     <div key={fund}>
                       <div className="flex justify-between mb-2">
                         <span className="text-xs font-bold text-slate-600 uppercase">{FUND_INFO[fund as FundType]?.label || fund}</span>
                         <span className="text-sm font-black text-slate-900">{formatCurrency((balance as number) ?? 0)}</span>
                       </div>
                       <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
-                        <div className="h-full rounded-full transition-all duration-1000" style={{ backgroundColor: FUND_INFO[fund as FundType]?.color || '#ccc', width: `${Math.max(0, (((balance as number) ?? 0) / (stats.totalIncome || 1)) * 100)}%` }} />
+                        <div className="h-full rounded-full transition-all duration-1000" style={{ backgroundColor: FUND_INFO[fund as FundType]?.color || '#ccc', width: `${Math.max(0, (((balance as number) ?? 0) / (dashboardStats.totalIncome || 1)) * 100)}%` }} />
                       </div>
                     </div>
                   ))}
