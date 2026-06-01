@@ -245,6 +245,54 @@ const App: React.FC = () => {
     };
   }, [transactions, treasurySummary, reportsHistory]);
 
+  // Estatísticas em tempo real do caixa atual (independente de snapshots de relatório)
+  const dashboardStats = useMemo((): FinancialStats => {
+    let entradasTotais = 0;
+    let saidasTotais = 0;
+    let infantilInc = 0;
+    let infantilExp = 0;
+
+    const currentRentTotal = treasurySummary?.rentReserveBalance ?? 0;
+
+    transactions.forEach((tx) => {
+      const isInfantil = tx.category === 'INFANTIL';
+      const desc = tx.description.toLowerCase();
+      const isInternal = desc.includes('reposição automática') || desc.includes('transferência');
+
+      if (isInfantil) {
+        if (tx.type === 'INCOME') infantilInc += tx.amount;
+        else infantilExp += tx.amount;
+        return;
+      }
+
+      if (isInternal) return;
+      if (tx.category === 'ALOCACAO_RENDA') return;
+
+      if (tx.type === 'INCOME') entradasTotais += tx.amount;
+      else saidasTotais += tx.amount;
+    });
+
+    const availableBalance = entradasTotais - saidasTotais - currentRentTotal;
+    const infantilBalance = infantilInc - infantilExp;
+    const churchCashOnHand = availableBalance + currentRentTotal;
+    const cashOnHand = churchCashOnHand + infantilBalance;
+
+    return {
+      openingBalance: 0,
+      totalIncome: entradasTotais ?? 0,
+      totalExpenses: saidasTotais ?? 0,
+      netBalance: isNaN(cashOnHand) ? 0 : cashOnHand,
+      fundBalances: {
+        ALUGUER: currentRentTotal ?? 0,
+        GERAL: isNaN(availableBalance) ? 0 : availableBalance,
+        INFANTIL: isNaN(infantilBalance) ? 0 : infantilBalance
+      },
+      infantilIncome: infantilInc ?? 0,
+      infantilExpenses: infantilExp ?? 0,
+      realChurchExpenses: saidasTotais ?? 0
+    };
+  }, [transactions, treasurySummary]);
+
   const chartHistory = useMemo(() => {
     const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
     const now = new Date();
@@ -529,8 +577,8 @@ const App: React.FC = () => {
   const completarReservaRenda = async () => {
     if (!assertCanEdit()) return;
 
-    const faltaParaMeta = config.rentTarget - stats.fundBalances.ALUGUER;
-    const saldoDisponivel = stats.fundBalances.GERAL;
+    const faltaParaMeta = config.rentTarget - dashboardStats.fundBalances.ALUGUER;
+    const saldoDisponivel = dashboardStats.fundBalances.GERAL;
     
     if (faltaParaMeta <= 0) {
       alert('A meta de reserva de renda já foi atingida!');
@@ -782,8 +830,8 @@ const App: React.FC = () => {
       )}
 
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <SummaryCard icon={<Wallet size={24} />} title="Saldo Disponível" value={formatCurrency(stats.fundBalances.GERAL)} color="blue" />
-        <SummaryCard icon={<TrendingUp size={24} />} title="Entradas Igreja" value={formatCurrency(stats.totalIncome)} color="emerald" />
+        <SummaryCard icon={<Wallet size={24} />} title="Saldo Disponível" value={formatCurrency(dashboardStats.fundBalances.GERAL)} color="blue" />
+        <SummaryCard icon={<TrendingUp size={24} />} title="Entradas Igreja" value={formatCurrency(dashboardStats.totalIncome)} color="emerald" />
         
         {/* Card especial da Reserva Renda com botão para completar */}
         <div className="bg-white p-5 rounded-3xl shadow-sm border border-amber-100 hover:shadow-md transition-all">
@@ -791,18 +839,18 @@ const App: React.FC = () => {
             <div className="p-3 rounded-2xl bg-amber-50 text-amber-600"><FileText size={24} /></div>
             <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Reserva Renda</span>
           </div>
-          <h3 className="text-2xl font-black text-slate-900 tracking-tighter">{formatCurrency(stats.fundBalances.ALUGUER)}</h3>
+          <h3 className="text-2xl font-black text-slate-900 tracking-tighter">{formatCurrency(dashboardStats.fundBalances.ALUGUER)}</h3>
           <p className="text-xs text-slate-500 mt-1">Meta: {formatCurrency(config.rentTarget)}</p>
           
-          {canEdit && stats.fundBalances.ALUGUER < config.rentTarget && stats.fundBalances.GERAL > 0 && (
+          {canEdit && dashboardStats.fundBalances.ALUGUER < config.rentTarget && dashboardStats.fundBalances.GERAL > 0 && (
             <button
               onClick={completarReservaRenda}
               className="mt-3 w-full py-2 px-3 bg-amber-100 hover:bg-amber-200 text-amber-800 text-xs font-bold rounded-xl transition-all"
             >
-              Completar Reserva ({formatCurrency(Math.min(config.rentTarget - stats.fundBalances.ALUGUER, stats.fundBalances.GERAL))})
+              Completar Reserva ({formatCurrency(Math.min(config.rentTarget - dashboardStats.fundBalances.ALUGUER, dashboardStats.fundBalances.GERAL))})
             </button>
           )}
-          {stats.fundBalances.ALUGUER >= config.rentTarget && (
+          {dashboardStats.fundBalances.ALUGUER >= config.rentTarget && (
             <p className="mt-3 text-xs text-emerald-600 font-bold">Meta atingida</p>
           )}
         </div>
@@ -815,11 +863,11 @@ const App: React.FC = () => {
             </div>
             <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Min. Infantil</span>
           </div>
-          <h3 className="text-2xl font-black text-slate-900 tracking-tighter">{formatCurrency(stats.fundBalances.INFANTIL)}</h3>
+          <h3 className="text-2xl font-black text-slate-900 tracking-tighter">{formatCurrency(dashboardStats.fundBalances.INFANTIL)}</h3>
           <p className="text-[10px] text-slate-500 mt-1">
-            <span className="text-emerald-600">+{formatCurrency(stats.infantilIncome)}</span>
+            <span className="text-emerald-600">+{formatCurrency(dashboardStats.infantilIncome)}</span>
             {' / '}
-            <span className="text-red-600">-{formatCurrency(stats.infantilExpenses)}</span>
+            <span className="text-red-600">-{formatCurrency(dashboardStats.infantilExpenses)}</span>
           </p>
         </div>
       </section>
@@ -856,11 +904,11 @@ const App: React.FC = () => {
       </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <TransactionForm onAdd={handleAddTransaction} config={config} currentRentBalance={stats.fundBalances.ALUGUER} readOnly={!canEdit} />
-        <FundDistribution stats={stats} />
+        <TransactionForm onAdd={handleAddTransaction} config={config} currentRentBalance={dashboardStats.fundBalances.ALUGUER} readOnly={!canEdit} />
+        <FundDistribution stats={dashboardStats} />
       </div>
 
-      <DashboardCharts stats={stats} history={chartHistory} />
+      <DashboardCharts stats={dashboardStats} history={chartHistory} />
       
       <RecentTransactions 
         transactions={transactions} 
