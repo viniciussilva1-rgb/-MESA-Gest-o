@@ -246,13 +246,42 @@ const App: React.FC = () => {
   }, [transactions, treasurySummary, reportsHistory]);
 
   const chartHistory = useMemo(() => {
-    const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun'];
-    return months.map((m) => ({
-      name: m,
-      income: stats.totalIncome * (0.8 + Math.random() * 0.4),
-      expense: stats.totalExpenses * (0.8 + Math.random() * 0.4),
-    }));
-  }, [stats]);
+    const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+    const now = new Date();
+
+    const buckets = Array.from({ length: 6 }, (_, index) => {
+      const date = new Date(now.getFullYear(), now.getMonth() - (5 - index), 1);
+      return {
+        key: `${date.getFullYear()}-${date.getMonth()}`,
+        name: monthNames[date.getMonth()],
+        income: 0,
+        expense: 0,
+      };
+    });
+
+    const bucketByKey = new Map(buckets.map((bucket) => [bucket.key, bucket]));
+
+    transactions.forEach((tx) => {
+      const txDate = new Date(tx.date);
+      if (isNaN(txDate.getTime())) return;
+
+      const desc = tx.description?.toLowerCase() ?? '';
+      const isInternal = desc.includes('reposição automática') || desc.includes('transferência');
+      if (isInternal || tx.category === 'ALOCACAO_RENDA') return;
+
+      const key = `${txDate.getFullYear()}-${txDate.getMonth()}`;
+      const bucket = bucketByKey.get(key);
+      if (!bucket) return;
+
+      if (tx.type === 'INCOME') {
+        bucket.income += tx.amount ?? 0;
+      } else {
+        bucket.expense += tx.amount ?? 0;
+      }
+    });
+
+    return buckets;
+  }, [transactions]);
 
   const syncToSheets = async () => {
     if (!assertCanEdit()) return;
