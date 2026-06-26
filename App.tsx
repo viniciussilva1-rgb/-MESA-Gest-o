@@ -1040,13 +1040,12 @@ const App: React.FC = () => {
     const reportCaixaTotal = reportSaldoInicial + reportReservaRenda + reportInfantil;
 
     // Entradas e Saídas filtradas pelo período selecionado
-    const filterStart = new Date(reportDateStart + 'T00:00:00');
-    const filterEnd = new Date(reportDateEnd + 'T23:59:59');
+    // Compara só YYYY-MM-DD para evitar problemas de fuso horário (tx.date é UTC ISO)
     let filteredIncome = 0;
     let filteredExpenses = 0;
     transactions.forEach(tx => {
-      const txDate = new Date(tx.date);
-      if (txDate < filterStart || txDate > filterEnd) return;
+      const txDateStr = tx.date.substring(0, 10); // "2026-06-15" de "2026-06-15T14:30:00.000Z"
+      if (txDateStr < reportDateStart || txDateStr > reportDateEnd) return;
       const isInfantil = tx.category === 'INFANTIL';
       const isInternal = tx.description.toLowerCase().includes('reposição automática');
       if (isInfantil || isInternal || tx.category === 'ALOCACAO_RENDA') return;
