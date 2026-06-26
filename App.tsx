@@ -60,6 +60,15 @@ const App: React.FC = () => {
   const [aiInsight, setAiInsight] = useState<string>('');
   const [isLoadingInsight, setIsLoadingInsight] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [reportDateStart, setReportDateStart] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  });
+  const [reportDateEnd, setReportDateEnd] = useState(() => {
+    const now = new Date();
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+  });
 
   // Verificar autenticação
   useEffect(() => {
@@ -1030,6 +1039,21 @@ const App: React.FC = () => {
     const reportInfantil = dashboardStats.fundBalances.INFANTIL ?? 0;
     const reportCaixaTotal = reportSaldoInicial + reportReservaRenda + reportInfantil;
 
+    // Entradas e Saídas filtradas pelo período selecionado
+    const filterStart = new Date(reportDateStart + 'T00:00:00');
+    const filterEnd = new Date(reportDateEnd + 'T23:59:59');
+    let filteredIncome = 0;
+    let filteredExpenses = 0;
+    transactions.forEach(tx => {
+      const txDate = new Date(tx.date);
+      if (txDate < filterStart || txDate > filterEnd) return;
+      const isInfantil = tx.category === 'INFANTIL';
+      const isInternal = tx.description.toLowerCase().includes('reposição automática');
+      if (isInfantil || isInternal || tx.category === 'ALOCACAO_RENDA') return;
+      if (tx.type === 'INCOME') filteredIncome += tx.amount;
+      else filteredExpenses += tx.amount;
+    });
+
     return (
       <div className="space-y-8 animate-in zoom-in-95 duration-500 print:bg-white print:p-0">
         {/* Botões de Exportação */}
@@ -1077,10 +1101,31 @@ const App: React.FC = () => {
             </div>
           </div>
 
+          <div className="flex flex-wrap items-end gap-4 mb-6 print:hidden">
+            <div>
+              <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">De</label>
+              <input
+                type="date"
+                value={reportDateStart}
+                onChange={e => setReportDateStart(e.target.value)}
+                className="border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">Até</label>
+              <input
+                type="date"
+                value={reportDateEnd}
+                onChange={e => setReportDateEnd(e.target.value)}
+                className="border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300"
+              />
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-12">
             <ReportStat label="Saldo Disponível" value={formatCurrency(reportSaldoInicial)} />
-            <ReportStat label="Entradas (Mês)" value={formatCurrency(stats.totalIncome ?? 0)} />
-            <ReportStat label="Saídas/Reservas" value={formatCurrency(stats.totalExpenses ?? 0)} />
+            <ReportStat label="Entradas (Mês)" value={formatCurrency(filteredIncome)} />
+            <ReportStat label="Saídas (Mês)" value={formatCurrency(filteredExpenses)} />
             <ReportStat label="Saldo Final Geral" value={formatCurrency(reportSaldoInicial)} highlight />
             <ReportStat label="Caixa Total" value={formatCurrency(reportCaixaTotal)} />
           </div>
